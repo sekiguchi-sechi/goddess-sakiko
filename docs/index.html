@@ -507,7 +507,7 @@ function optimizeF(f){
 function canon(t){const idx=[0,1,2,3,4].sort((a,b)=>(b===t.L)-(a===t.L)||t.m[a]-t.m[b]);
   return{...t,m:idx.map(i=>t.m[i]),s:idx.map(i=>t.s[i]),lm:idx.map(i=>t.lm[i]),ls:idx.map(i=>t.ls[i]),L:0}}
 // 推定ランクに届かない（安定しない）場合の次善: それより下のランクを狙う候補のうち価値が最大のもの
-function altOf(R){if(!R||!R.best||!R.frontier)return null;return R.frontier.filter(p=>p.rank<R.best.rank).reduce((a,b)=>!a||b.val>a.val?b:a,null)}
+function altOf(R){if(!R||!R.best||!R.frontier)return null;if(R.safe)return R.safe;return R.frontier.filter(p=>p.rank<R.best.rank).reduce((a,b)=>!a||b.val>a.val?b:a,null)}
 function solve(song,obj){
   // 合計目的: 先にチャレンジ楽曲で最適なチャレンジ編成を求め、チャレンジpt 1あたりの価値を出す
   let chal=null;
@@ -518,7 +518,7 @@ function solve(song,obj){
     if(cr.best){const e=ev({...cr.best.t,detail:true});
       chal={song:chSong.name,rank:RANKS[cr.best.rank],score:e.score,lo:e.lo,hi:e.hi,pt:e.pt,it:e.it,P:e.P,per1600:cr.best.val*8,vpc:cr.best.val/200,
         slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};
-      const ca=altOf(cr);if(ca){const e2=ev({...ca.t,detail:true});chal.alt={rank:RANKS[ca.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:ca.val*8,ratio:ca.val/cr.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===ca.t.L))}}}
+      const ca=altOf(cr);if(ca){const e2=ev({...ca.t,detail:true});chal.alt={extra:ca.extra,rank:RANKS[ca.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:ca.val*8,ratio:ca.val/cr.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===ca.t.L))}}}
   }
   if(obj==='gkscore'&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
   prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',obj==='gkscore');CTX.vpc=chal?chal.vpc:0;
@@ -555,7 +555,12 @@ function solve(song,obj){
   // 価値が同じなら、もう一方のボーナス→スコアの高い方（同点の選び方で毎回結果が変わらないように）
   const sub=bonusKey==='pt'?'it':'pt';
   const best=fr.reduce((a,b)=>!a||b.val>a.val||(b.val===a.val&&(b.e[sub]>a.e[sub]||(b.e[sub]===a.e[sub]&&b.e.score>a.e.score)))?b:a,null);
-  return{best,frontier:fr,bonusKey,chal,songId:song.id};
+  // 次善（安定重視）: 推定ランクはそのままで、推定スコアの幅を +3% 広げても届く中でボーナス最大の編成
+  let safe=null;
+  if(best&&best.rank>0){const SAFE=state.settings.safeExtra??3,th=song.thr?.[RANKS[best.rank]]||0,need2=th/(1-(state.settings.margin+SAFE)/100);
+    const g=e=>e.lo>=need2?1e15+e[bonusKey]*1e6+e[sub]*1e2+e.lo*1e-5:e.lo;const t=optimizeF(g);const p=pack(t);
+    if(p.e.lo>=need2&&p.rank===best.rank&&(p.e.pt!==best.e.pt||p.e.it!==best.e.it||p.e.lo>best.e.lo))safe={...p,extra:SAFE}}
+  return{best,frontier:fr,bonusKey,chal,songId:song.id,safe};
 }
 
 // ===== 描画 =====
@@ -610,7 +615,7 @@ function viewOpt(){
 }
 // 次善編成（推定ランクが安定しないとき用）の表示
 function altBox(a,unit){if(!a)return'';const pct=Math.round((a.ratio-1)*1000)/10;
-  return`<details class="altbox"${state.ui.altOpen?' open':''} data-alt><summary><b>推定ランクに届かないとき（安定しないとき）の次善編成</b>：${a.rank}・pt +${a.pt}%・アイテム +${a.it}%・${unit} ${fmt(a.val)}（${pct>=0?'+':''}${pct}%）</summary>
+  return`<details class="altbox"${state.ui.altOpen?' open':''} data-alt><summary><b>推定ランクに届かないとき（安定しないとき）の次善編成</b>${a.extra?`（同じランクで推定スコアの幅＋${a.extra}%）`:'（1つ下のランク）'}：${a.rank}・pt +${a.pt}%・アイテム +${a.it}%・${unit} ${fmt(a.val)}（${pct>=0?'+':''}${pct}%）</summary>
     <div class="kpis" style="margin-top:8px"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${a.rank}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(a.P)}</div></div>
       <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(a.score)}</div><div class="mono muted" style="font-size:12px">${fmt(a.lo*lowF())} 〜 ${fmt(a.hi*highF())}</div></div>
@@ -659,7 +664,7 @@ function renderResult(){
     <p class="note">スキル寄与 +${(e.Sk*100).toFixed(1)}%。${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-    ${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});return altBox({rank:RANKS[a.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:a.val,ratio:a.val/R.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===a.t.L))},R.chal?'1回あたり（チャレンジ換算込み）':'1回あたり')})():''}
+    ${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});return altBox({extra:a.extra,rank:RANKS[a.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:a.val,ratio:a.val/R.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===a.t.L))},R.chal?'1回あたり（チャレンジ換算込み）':'1回あたり')})():''}
     ${PUBLIC?'':`<details><summary>実プレイのスコアで係数Kを校正する</summary>
       <div class="row" style="margin-top:8px"><label class="f">この編成で出た実スコア<input type="number" id="calScore" style="width:130px" placeholder="例 3710000"></label><button class="btn small" data-act="calibrate">Kを更新</button><span class="note">今のK = ${song.K}。実スコア ÷ (総合力 × (1+スキル寄与)) を新しいKにします。</span></div>
     </details>`}
