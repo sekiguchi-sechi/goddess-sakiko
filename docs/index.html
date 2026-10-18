@@ -984,6 +984,9 @@ function comboPick(inp,v){
 document.addEventListener('focusin',e=>{const t=e.target;if(t.classList?.contains('songpick')){t.value='';comboOpen(t,'')}});
 document.addEventListener('input',e=>{const t=e.target;if(t.classList?.contains('songpick'))comboOpen(t,t.value)});
 document.addEventListener('focusout',e=>{const t=e.target;if(t.classList?.contains('songpick'))setTimeout(()=>{if(document.activeElement!==t)comboClose(t,true)},150)});
+// 曲リストの外をクリック・タップしたら閉じる（入力中の文字は確定前の曲名に戻す）
+document.addEventListener('pointerdown',e=>{if(e.target.closest?.('.combo'))return;
+  document.querySelectorAll('.combo .combo-list:not([hidden])').forEach(l=>{const inp=l.parentNode.querySelector('.songpick');comboClose(inp,true);if(document.activeElement===inp)inp.blur()})},true);
 document.addEventListener('mousedown',e=>{
   const o=e.target.closest?.('.combo-opt');if(o){e.preventDefault();comboPick(o.closest('.combo').querySelector('.songpick'),o.dataset.v);return}
   const b=e.target.closest?.('[data-combo-btn]');if(b){e.preventDefault();const inp=document.getElementById(b.dataset.comboBtn);if(document.activeElement===inp){comboClose(inp,true);inp.blur()}else inp.focus()}
