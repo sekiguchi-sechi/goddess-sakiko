@@ -334,7 +334,7 @@ function evBonus(c,kind){
 // ===== 計算モデル =====
 // slot総合力 = B × (1 + スナップ補正 + スナップのイベント%パラ + バンドアイテム + タイプリンク + 楽曲タイプ一致 + リーダースキル)
 // B = 個人総合力 × (1 + メンバーのイベント%パラ)
-// 予想スコア = K × 総合力 × (1 + Σ スキル% × 効果秒 / 曲の長さ)
+// 推定スコア = K × 総合力 × (1 + Σ スキル% × 効果秒 / 曲の長さ)
 let M=[],S=[],CTX=null;
 
 // 例: 祥子31・合計632 → 3×(150＋60)=630（総合力詳細「キャラランク」と一致）
@@ -423,7 +423,7 @@ function ev(t){
     return{P,Sk,GB,free,gkMul:win/free,gkW,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,slots,gk2:true,mk,nj}}
   return{P,Sk,GB,free,gkMul,gkW,gkLose:free*gkLoseMul,score:free*gkMul,sd,lo:(free-z*sd)*gkMul,hi:(free+z*sd)*gkMul,pt,it,slots};
 }
-// 予想スコアは ±margin% の幅で扱い、ランクは幅の下限（確実に届く値）で判定する
+// 推定スコアは ±margin% の幅で扱い、ランクは幅の下限（確実に届く値）で判定する
 const lowF=()=>1-state.settings.margin/100, highF=()=>1+state.settings.margin/100;
 function rankRaw(score,song){const T=CTX?.gk?song.gkThr:song.thr;let r=0;for(let i=1;i<RANKS.length;i++){const th=T?.[RANKS[i]];if(th>0&&score>=th)r=i}return r}
 function rankOf(score,song){return rankRaw(score*lowF(),song)}
@@ -594,10 +594,10 @@ function viewOpt(){
       <label class="f${useCh?'':' dim'}" title="${useCh?'':'この目的では使いません'}">チャレンジ楽曲${useCh?'':'（この目的では不使用）'}${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||song)?.name||''))}</label>
       <label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>
       <label class="f${useMult?'':' dim'}" title="${useMult?'':'この目的では使いません'}">チャレンジ消費倍率${useMult?'':'（この目的では不使用）'}<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>
-      <label class="f">予想スコアの幅 ±%<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
+      <label class="f">推定スコアの幅 ±%<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
-    <p class="note">予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「予想スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
+    <p class="note">推定スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「推定スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
   </section>
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   </div>`;
@@ -611,7 +611,7 @@ function renderResult(){
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const slots=teamTable(e.slots.map((x,i)=>slotRow(x,i===P.t.L)));
-  const fr=R.frontier.length?`<h3>到達ランク別の候補</h3><div class="tbl"><table><thead><tr><th>予想ランク</th><th class="num">予想の中央に必要</th><th class="num">予想スコアの幅</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
+  const fr=R.frontier.length?`<h3>到達ランク別の候補</h3><div class="tbl"><table><thead><tr><th>推定ランク</th><th class="num">予想の中央に必要</th><th class="num">推定スコアの幅</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
     ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${fmt(p.e.lo*lowF())} 〜 ${fmt(p.e.hi*highF())}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
     </tbody></table></div>`:'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
@@ -620,18 +620,18 @@ function renderResult(){
     const direct=Math.floor(((isPt?st.ptBase[Rk]:st.itemBase[Rk])||0)*(1+(isPt?e.pt:e.it)/100)*boost),cp=Math.floor((st.chGainBase[Rk]||0)*boost);
     chalHtml=`<div class="panel stack"><h2>チャレンジ — ${esc(C.song)}</h2>
     <p class="note">フリーライブ1回（LB${st.lb}）で：直接 ${fmt(direct)} ＋ チャレンジpt ${cp} → チャレンジライブ換算 ${fmt(cp*C.vpc)}（合計 ${fmt(direct+cp*C.vpc)}）。チャレンジpt 1あたり ${C.vpc.toFixed(1)}${isPt?'pt':'個'}。チャレンジライブではイベント対象カードの総合力がボーナス分上がります（パラメータボーナス）。</p>
-    <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis"><div class="kpi"><div class="k">予想ランク</div><div class="v r">${C.rank}</div></div>
-      <div class="kpi"><div class="k">総合力</div><div class="v">${fmt(C.P)}</div></div>
-      <div class="kpi"><div class="k">予想スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
+    <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
+      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
       <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div></details>
     ${teamTable(C.slots)}</div>`}
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis">
-      <div class="kpi"><div class="k">予想ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
-      <div class="kpi"><div class="k">予想スコア（幅）</div><div class="v">${fmt(e.score)}</div><div class="mono muted" style="font-size:12px">${fmt(e.lo*lowF())} 〜 ${fmt(e.hi*highF())}</div></div>
-      <div class="kpi"><div class="k">総合力（推定）</div><div class="v">${fmt(e.P)}</div></div>
+      <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
+      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(e.score)}</div><div class="mono muted" style="font-size:12px">${fmt(e.lo*lowF())} 〜 ${fmt(e.hi*highF())}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
       <div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>
       <div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>
       <div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>
@@ -642,7 +642,7 @@ function renderResult(){
         <div class="kpi" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
       :`<div class="kpi"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`}
     </div>
-    <p class="note">スキル寄与 +${(e.Sk*100).toFixed(1)}%。${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、予想スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
+    <p class="note">スキル寄与 +${(e.Sk*100).toFixed(1)}%。${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
     ${PUBLIC?'':`<details><summary>実プレイのスコアで係数Kを校正する</summary>
@@ -710,7 +710,7 @@ function viewSnaps(){
 function viewSongs(){
   return`<div class="stack"><section class="panel stack">
     <div class="row"><h2 style="margin:0">楽曲</h2><button class="btn small primary" data-act="addSong">＋ 追加</button></div>
-    <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。<b>スコア係数K</b>は「予想スコア ÷ (総合力 × (1+スキル寄与))」。自分のプレイ精度もここに含まれるので、最適化タブで実スコアから校正するのが確実です。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
+    <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。<b>スコア係数K</b>は「推定スコア ÷ (総合力 × (1+スキル寄与))」。自分のプレイ精度もここに含まれるので、最適化タブで実スコアから校正するのが確実です。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
   </section>
   <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>曲タイプ</th><th>得意楽曲のバンド</th><th class="num">長さ(秒)</th><th class="num">係数K</th>${RANKS.slice(1).map(r=>`<th class="num">${r}</th>`).join('')}<th></th></tr></thead><tbody>
   ${state.songs.map(s=>`<tr data-kind="songs" data-id="${s.id}">
@@ -853,7 +853,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
   <section class="panel stack"><h2>計算モデルと出典</h2>
     <ul class="note" style="margin:0;padding-left:18px">
       <li>枠の総合力＝個人総合力×(1+メンバーのイベントパラ%)×(1＋スナップ補正%＋スナップのイベントパラ%＋バンドアイテム%＋タイプリンク%（スナップ覚醒×5%）＋タイプボーナス%（曲タイプ一致・メンバー覚醒×5%）＋得意楽曲%（持ち歌バンド・メンバー覚醒×5%）＋T.G.W CARD%＋リーダースキル%×対象パラメータの比率)。ゲームの「総合力詳細」の内訳（メンバー＋リーダースキル＋スナップ＋バンドアイテム＋キャラランク＋タイプリンク＋T.G.W CARD）と同じ足し算の形です。キャラランクの固定加算（5人で数千程度）は省略しています。</li>
-      <li>予想スコア（フリー・チャレンジ）＝総合力×(base＋x̄×W)×全体補正。bdon.moe のモデルで、base は曲ごとのスキルなし全PERFECTのスコア÷総合力、W はスキル発動枠5つの重みの合計、x̄ は5人の「スキル%×(5秒＋延長秒)/5秒」の平均。スキルは1曲5回、メンバー順はライブごとにランダム（120通り）なので、順番による±のばらつきも計算し、悪い順番（既定1.28σ＝下位約10%）でも届くランクで判定します。全体補正1.005は実測6回の平均。撃奏ライブと、bdon.moe にデータの無い曲は従来の K×総合力×(1＋実効係数×Σスキル%×秒/曲長) です。</li>
+      <li>推定スコア（フリー・チャレンジ）＝総合力×(base＋x̄×W)×全体補正。bdon.moe のモデルで、base は曲ごとのスキルなし全PERFECTのスコア÷総合力、W はスキル発動枠5つの重みの合計、x̄ は5人の「スキル%×(5秒＋延長秒)/5秒」の平均。スキルは1曲5回、メンバー順はライブごとにランダム（120通り）なので、順番による±のばらつきも計算し、悪い順番（既定1.28σ＝下位約10%）でも届くランクで判定します。全体補正1.005は実測6回の平均。撃奏ライブと、bdon.moe にデータの無い曲は従来の K×総合力×(1＋実効係数×Σスキル%×秒/曲長) です。</li>
       <li>ランクは閾値×(1＋安全マージン)で判定。pt・アイテムは同一ランク内ならスコアで増えないので、ランクを保ったままボーナスを最大化します。</li>
       <li>出典：<a href="https://github.com/empty-sekai/ournotes-deck" target="_blank" rel="noopener">empty-sekai/ournotes-deck</a>（クライアント準拠の計算式）、<a href="https://minemineaoao.hippy.jp/ourno/eventguide.html" target="_blank" rel="noopener">minemineaoao氏 イベント攻略（基礎値・ボーナス表）</a>、<a href="https://appmedia.jp/bang-dream-on/80441902" target="_blank" rel="noopener">AppMedia イベント解説</a>、<a href="https://gamerch.com/bang-dream-on/1017723" target="_blank" rel="noopener">Gamerch</a>、<a href="https://bdon.moe/en/tools/deck" target="_blank" rel="noopener">bdon.moe Deck builder</a>。</li>
     </ul>
