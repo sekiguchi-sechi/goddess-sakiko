@@ -789,7 +789,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
   const ranks=CHARAS.filter(c=>(st.charaRankLv?.[c]||1)>1).length;
   return`<div class="stack"><section class="panel stack"><h2>手持ちの保存・読み込み</h2>
     <p class="note">入力はこのブラウザに自動保存されます。機種変更や別の端末で使うときは、ファイルに書き出して、移した先で読み込んでください。</p>
-    <div class="row"><button class="btn small primary" data-act="exportFile">ファイルに書き出す</button><button class="btn small" data-act="importFile">JSONファイルを読み込む</button><input type="file" id="importFile" accept=".json,application/json" hidden><button class="btn small" data-act="clearRoster">手持ちを空にする</button></div>
+    <div class="row"><span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
     <p id="jsonMsg" class="note"></p>
     <p class="note">いまの登録：メンバー${nm}枚・スナップ${ns}枚</p>
   </section>
@@ -841,8 +841,8 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
   </section>
   <section class="panel stack"><h2>手持ちの保存・移行</h2>
     <p class="note">入力はこのブラウザに自動保存されます。機種変更や別の端末で使うときは、ファイルに書き出して、移した先で読み込んでください。</p>
-    <div class="row"><button class="btn small primary" data-act="exportFile">ファイルに書き出す</button><button class="btn small" data-act="importFile">ファイルから読み込む</button><input type="file" id="importFile" accept=".json,application/json" hidden>
-      <button class="btn small" data-act="useAuthor">作者の手持ちで試す</button><button class="btn small" data-act="clearRoster">手持ちを空にする</button></div>
+    <div class="row"><button class="btn small" data-act="useAuthor">作者の手持ちで試す</button><span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+
   </section>
   <section class="panel stack"><h2>データの保存・移行（テキスト）</h2>
     <p class="note">入力はこのブラウザに自動保存されます。別の端末へ移すときや控えを取るときは、下のJSONをコピーして保存し、読み込み欄に貼り付けてください。</p>
