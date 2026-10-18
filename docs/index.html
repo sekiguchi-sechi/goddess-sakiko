@@ -86,6 +86,7 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
+.frbox>summary{cursor:pointer}
 .jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--bg);padding:10px;border-radius:8px;margin:6px 0}
 .guide>summary{cursor:pointer}.guide .steps{margin:8px 0;padding-left:20px;line-height:1.7}.guide .steps li.done{color:var(--muted)}
 .combo-opt em{font-style:normal;font-size:11px;color:var(--accent);margin-left:4px}
@@ -611,9 +612,9 @@ function renderResult(){
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const slots=teamTable(e.slots.map((x,i)=>slotRow(x,i===P.t.L)));
-  const fr=R.frontier.length?`<h3>到達ランク別の候補</h3><div class="tbl"><table><thead><tr><th>推定ランク</th><th class="num">予想の中央に必要</th><th class="num">推定スコアの幅</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
+  const fr=R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">予想の中央に必要</th><th class="num">推定スコアの幅</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
     ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${fmt(p.e.lo*lowF())} 〜 ${fmt(p.e.hi*highF())}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
-    </tbody></table></div>`:'';
+    </tbody></table></div></details>`:'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
   const C=R.chal;let chalHtml='';
   if(C){const isPt=R.obj==='ptTotal',boost=st.lb>0?st.lb*5:1,Rk=RANKS[P.rank];
@@ -948,6 +949,7 @@ document.addEventListener('change',e=>{
   state.sample=false;lastResult=null;save();
   if(['chara','type','awak','lb','name','band','target','card','bonus','param'].includes(f))render();
 });
+document.addEventListener('toggle',ev=>{const f=ev.target;if(f.matches&&f.matches('details[data-fr]')){state.ui.frOpen=f.open;save()}},true);
 document.addEventListener('toggle',ev=>{const g=ev.target;if(g.matches&&g.matches('details[data-guide]')){state.ui.guide=g.open;save();return}},true);
 document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches||!d.matches('details[data-kpi]'))return;state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open});save()},true);
 function runOpt(){
