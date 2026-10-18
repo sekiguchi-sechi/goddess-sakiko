@@ -86,6 +86,7 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
+.altbox{border-top:1px dashed var(--line);padding-top:8px}.altbox>summary{cursor:pointer;font-size:13px}
 .combo-opt small.gk{margin-left:6px;font-size:11px;color:var(--muted);white-space:nowrap}
 .frbox>summary{cursor:pointer}
 .jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--bg);padding:10px;border-radius:8px;margin:6px 0}
@@ -505,6 +506,8 @@ function optimizeF(f){
 // 並び順だけ違う同じ編成が毎回違って見えないよう、リーダーを先頭・残りはメンバー一覧順に並べ替える
 function canon(t){const idx=[0,1,2,3,4].sort((a,b)=>(b===t.L)-(a===t.L)||t.m[a]-t.m[b]);
   return{...t,m:idx.map(i=>t.m[i]),s:idx.map(i=>t.s[i]),lm:idx.map(i=>t.lm[i]),ls:idx.map(i=>t.ls[i]),L:0}}
+// 推定ランクに届かない（安定しない）場合の次善: それより下のランクを狙う候補のうち価値が最大のもの
+function altOf(R){if(!R||!R.best||!R.frontier)return null;return R.frontier.filter(p=>p.rank<R.best.rank).reduce((a,b)=>!a||b.val>a.val?b:a,null)}
 function solve(song,obj){
   // 合計目的: 先にチャレンジ楽曲で最適なチャレンジ編成を求め、チャレンジpt 1あたりの価値を出す
   let chal=null;
@@ -514,7 +517,8 @@ function solve(song,obj){
     const cr=solve(chSong,obj==='ptTotal'?'chpt':'chitem');state.settings.chMult=keep;
     if(cr.best){const e=ev({...cr.best.t,detail:true});
       chal={song:chSong.name,rank:RANKS[cr.best.rank],score:e.score,lo:e.lo,hi:e.hi,pt:e.pt,it:e.it,P:e.P,per1600:cr.best.val*8,vpc:cr.best.val/200,
-        slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))}}
+        slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};
+      const ca=altOf(cr);if(ca){const e2=ev({...ca.t,detail:true});chal.alt={rank:RANKS[ca.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:ca.val*8,ratio:ca.val/cr.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===ca.t.L))}}}
   }
   if(obj==='gkscore'&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
   prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',obj==='gkscore');CTX.vpc=chal?chal.vpc:0;
@@ -604,6 +608,14 @@ function viewOpt(){
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   </div>`;
 }
+// 次善編成（推定ランクが安定しないとき用）の表示
+function altBox(a,unit){if(!a)return'';const pct=Math.round((a.ratio-1)*1000)/10;
+  return`<details class="altbox"${state.ui.altOpen?' open':''} data-alt><summary><b>推定ランクに届かないとき（安定しないとき）の次善編成</b>：${a.rank}・pt +${a.pt}%・アイテム +${a.it}%・${unit} ${fmt(a.val)}（${pct>=0?'+':''}${pct}%）</summary>
+    <div class="kpis" style="margin-top:8px"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${a.rank}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(a.P)}</div></div>
+      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(a.score)}</div><div class="mono muted" style="font-size:12px">${fmt(a.lo*lowF())} 〜 ${fmt(a.hi*highF())}</div></div>
+      <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${a.pt}% / +${a.it}%</div></div></div>
+    ${teamTable(a.slots)}</details>`}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
@@ -627,7 +639,7 @@ function renderResult(){
       <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
       <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div></details>
-    ${teamTable(C.slots)}</div>`}
+    ${teamTable(C.slots)}${altBox(C.alt,'8倍1回')}</div>`}
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis">
@@ -647,6 +659,7 @@ function renderResult(){
     <p class="note">スキル寄与 +${(e.Sk*100).toFixed(1)}%。${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
+    ${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});return altBox({rank:RANKS[a.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:a.val,ratio:a.val/R.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===a.t.L))},R.chal?'1回あたり（チャレンジ換算込み）':'1回あたり')})():''}
     ${PUBLIC?'':`<details><summary>実プレイのスコアで係数Kを校正する</summary>
       <div class="row" style="margin-top:8px"><label class="f">この編成で出た実スコア<input type="number" id="calScore" style="width:130px" placeholder="例 3710000"></label><button class="btn small" data-act="calibrate">Kを更新</button><span class="note">今のK = ${song.K}。実スコア ÷ (総合力 × (1+スキル寄与)) を新しいKにします。</span></div>
     </details>`}
@@ -949,6 +962,7 @@ document.addEventListener('change',e=>{
   state.sample=false;lastResult=null;save();
   if(['chara','type','awak','lb','name','band','target','card','bonus','param'].includes(f))render();
 });
+document.addEventListener('toggle',ev=>{const a=ev.target;if(a.matches&&a.matches('details[data-alt]')){state.ui.altOpen=a.open;document.querySelectorAll('details[data-alt]').forEach(x=>{if(x!==a&&x.open!==a.open)x.open=a.open});save()}},true);
 document.addEventListener('toggle',ev=>{const f=ev.target;if(f.matches&&f.matches('details[data-fr]')){state.ui.frOpen=f.open;save()}},true);
 document.addEventListener('toggle',ev=>{const g=ev.target;if(g.matches&&g.matches('details[data-guide]')){state.ui.guide=g.open;save();return}},true);
 document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches||!d.matches('details[data-kpi]'))return;state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open});save()},true);
