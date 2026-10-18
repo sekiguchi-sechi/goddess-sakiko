@@ -86,6 +86,7 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
+.combo-opt small.gk{margin-left:6px;font-size:11px;color:var(--muted);white-space:nowrap}
 .frbox>summary{cursor:pointer}
 .jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--bg);padding:10px;border-radius:8px;margin:6px 0}
 .guide>summary{cursor:pointer}.guide .steps{margin:8px 0;padding-left:20px;line-height:1.7}.guide .steps li.done{color:var(--muted)}
@@ -973,10 +974,13 @@ function comboItems(id){
   const chIds=new Set(ch.map(x=>x.v));
   return[{v:'none',l:NO_CH},...ch,...songs.filter(x=>!chIds.has(x.v))];
 }
+// 撃奏区間の種類（例 JUST・JUST・JUST）。同じ種類だけなら「JUST×3」
+function gkLabel(id){const t=state.songs.find(x=>x.id===id)?.gkTypes;if(!t||!t.length)return'';
+  const txt=t.every(x=>x===t[0])?`${t[0]}×${t.length}`:t.join('・');return` <small class="gk">${txt}</small>`}
 function comboOpen(inp,q){
   const list=inp.parentNode.querySelector('.combo-list');const nz=x=>x.normalize('NFKC').toLowerCase();const qq=nz(q||'');
   const items=comboItems(inp.id).filter(x=>!qq||nz(x.l).includes(qq));
-  list.innerHTML=items.length?items.map((x,k)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}</span>`).join(''):'<span class="combo-empty">一致する曲がありません</span>';
+  list.innerHTML=items.length?items.map((x,k)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}${gkLabel(x.v)}</span>`).join(''):'<span class="combo-empty">一致する曲がありません</span>';
   list.hidden=false;inp.setAttribute('aria-expanded','true');
 }
 function comboClose(inp,restore){const list=inp.parentNode.querySelector('.combo-list');list.hidden=true;inp.setAttribute('aria-expanded','false');if(restore)inp.value=inp.dataset.prev}
