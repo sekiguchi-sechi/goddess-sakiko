@@ -650,7 +650,9 @@ function cardFilter(){const f=state.ui.cf||{own:'own',band:''};state.ui.cf=f;ret
 function filterBar(kind){const f=cardFilter();const own=Object.values(state.roster[kind]).filter(r=>r.own).length;
   return`<div class="row"><label class="f">表示<select data-cf="own">${opts([['own','所持のみ'],['all','全カード'],['not','未所持のみ']],f.own)}</select></label>
     <label class="f">バンド<select data-cf="band">${opts(BAND_NAMES,f.band,'すべて')}</select></label>
-    <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span></div>`}
+    <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
+    <span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+    <p id="jsonMsg" class="note" style="margin:0"></p>`}
 function pass(r,band){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&band!==f.band)return false;return true}
 const fmtLead=L=>L.map(([c,st,p])=>`${c==='all'?'全員':c.replace(/^(band|type|chara|skill|geki|bandtype):/,'').replace(':','・')} ${({all:'全',P:'P',T:'T',V:'V'})[st]}+${p}%`).join('／')||'—';
 function emptyNote(kind){return Object.values(state.roster[kind]).some(r=>r.own)?'':`<div class="banner"><b>まだ所持カードがありません。</b><span class="muted">「表示」を「全カード」にして、持っているカードの「所持」にチェックを入れてください。</span><button class="btn small" data-act="showAll">全カードを表示</button></div>`}
@@ -741,7 +743,15 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
     <p class="note">入力はこのブラウザに自動保存されます。機種変更や別の端末で使うときは、ファイルに書き出して、移した先で読み込んでください。</p>
     <div class="row"><button class="btn small primary" data-act="exportFile">ファイルに書き出す</button><button class="btn small" data-act="importFile">JSONファイルを読み込む</button><input type="file" id="importFile" accept=".json,application/json" hidden><button class="btn small" data-act="clearRoster">手持ちを空にする</button></div>
     <p id="jsonMsg" class="note"></p>
-    <p class="note">いまの登録：メンバー${nm}枚・スナップ${ns}枚、キャラクターランク入力済み${ranks}人、T.G.W CARD 全パラメータ+${st.vip||0}%、バンドアイテム ${BAND_NAMES.map(b=>`${b} ${st.bandItem?.[b]||0}%`).join('・')}</p>
+    <p class="note">いまの登録：メンバー${nm}枚・スナップ${ns}枚</p>
+  </section>
+  <section class="panel stack"><h2>プレイヤー情報</h2>
+    <p class="note">総合力の計算に使います。ゲーム内の表示に合わせて入れてください（JSONの読み込みでも更新できます）。</p>
+    <div class="row"><label class="f">T.G.W CARD 全パラメータ %<input type="number" data-set="vip" value="${st.vip||0}" step="1" min="0" style="width:72px"></label></div>
+    <h3 style="margin:6px 0 0">バンドアイテム（全パラメータ %）</h3>
+    <div class="row">${BAND_NAMES.map(b=>`<label class="f">${esc(b)}<input type="number" data-set="bandItem.${b}" value="${st.bandItem?.[b]||0}" step="0.1" min="0" style="width:72px"></label>`).join('')}</div>
+    <h3 style="margin:6px 0 0">キャラクターランク</h3>
+    ${BAND_NAMES.map(b=>`<div class="row">${BANDS[b].map(c=>`<label class="f">${esc(c)}<input type="number" data-set="charaRankLv.${c}" value="${st.charaRankLv?.[c]??1}" step="1" min="1" style="width:64px"></label>`).join('')}</div>`).join('')}
   </section>
   <section class="panel stack"><h2>JSONで手持ち・プレイヤー情報を更新する</h2>
     <p class="note">次の形のJSONファイルを読み込むと、書いてある項目だけを上書きします（書いていないカードや項目はそのまま）。</p>
@@ -752,11 +762,11 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
     "vip": 15
   },
   "roster": {
-    "m": { "59": { "own": 1, "lv": 90, "tr": 5, "rk": 4, "sl": 5, "gl": 4 } },
-    "s": { "44": { "own": 1, "lv": 90, "rk": 5 } }
+    "m": { "魅せる光のリズム": { "own": 1, "lv": 90, "tr": 5, "rk": 4, "sl": 5, "gl": 4 } },
+    "s": { "カルペディエムの饗宴": { "own": 1, "lv": 90, "rk": 5 } }
   }
 }</pre>
-    <p class="note">charaRankLv＝キャラクターランク、bandItem＝バンドアイテムの全パラメータ%、vip＝T.G.W CARD の全パラメータ%。roster.m はメンバー（キー＝カードID、lv＝Lv、tr＝特訓、rk＝覚醒、sl＝ライブスキルLv、gl＝撃奏スキルLv）、roster.s はスナップ（lv＝Lv、rk＝上限解放）。カードIDは書き出したファイルで確認できます。</p>
+    <p class="note">charaRankLv＝キャラクターランク、bandItem＝バンドアイテムの全パラメータ%、vip＝T.G.W CARD の全パラメータ%。roster.m はメンバー、roster.s はスナップで、キーはカード名（例 "魅せる光のリズム"）かカードIDです。own＝所持(1/0)、lv＝Lv、tr＝特訓、rk＝覚醒（スナップは上限解放）、sl＝ライブスキルLv、gl＝撃奏スキルLv。</p>
   </section>
   <section class="panel stack"><h2>このツールについて</h2>
     <p class="note">非公式のファンツールです。カード・楽曲のデータと計算式は、ゲームデータを解析した <a href="https://bdon.moe/" target="_blank" rel="noopener">bdon.moe</a> の公開情報にもとづきます。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。</p>
@@ -829,7 +839,8 @@ function importData(o){
   if(!o.roster&&!o.settings&&!Array.isArray(o.members))throw 0;
   if(Array.isArray(o.members)&&!o.roster){state=o;normalize();return'読み込みました。'}
   let n=0;
-  for(const k of ['m','s'])for(const [id,r] of Object.entries(o.roster?.[k]||{})){const c=(k==='m'?CM:CSN)[id];if(!c)continue;
+  const byName={m:Object.fromEntries(CAT.members.map(c=>[c.title,c])),s:Object.fromEntries(CAT.snaps.map(c=>[c.title,c]))};
+  for(const k of ['m','s'])for(const [key,r] of Object.entries(o.roster?.[k]||{})){const c=(k==='m'?CM:CSN)[key]||byName[k][key];if(!c)continue;const id=c.id;
     const cur=state.roster[k][id]||(k==='m'?newMR(c):newSR(c));for(const f of (k==='m'?['own','lv','tr','rk','sl','gl','lock','excl']:['own','lv','rk','lock','excl']))if(r[f]!=null)cur[f]=+r[f];
     clampR(k,c,cur);cur.ed=1;state.roster[k][id]=cur;n++}
   const st=o.settings||{};
@@ -881,7 +892,7 @@ document.addEventListener('change',e=>{
   if(el.id==='chMult'){state.settings.chMult=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
   if(el.id==='margin'){state.settings.margin=+el.value||0;save();return}
   if(el.id==='evName'){state.event.name=el.value;save();return}
-  if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();return}
+  if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
   if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
   const ctr=el.closest('tr[data-kind="cm"],tr[data-kind="cs"]');
