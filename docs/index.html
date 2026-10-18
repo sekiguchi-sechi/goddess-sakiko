@@ -85,6 +85,7 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
+.jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--bg);padding:10px;border-radius:8px;margin:6px 0}
 .guide>summary{cursor:pointer}.guide .steps{margin:8px 0;padding-left:20px;line-height:1.7}.guide .steps li.done{color:var(--muted)}
 .combo-opt em{font-style:normal;font-size:11px;color:var(--accent);margin-left:4px}
 .combo-opt:hover,.combo-opt.on{background:var(--soft)}
@@ -652,7 +653,7 @@ function filterBar(kind){const f=cardFilter();const own=Object.values(state.rost
     <label class="f">バンド<select data-cf="band">${opts(BAND_NAMES,f.band,'すべて')}</select></label>
     <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
     <span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
-    <p id="jsonMsg" class="note" style="margin:0"></p>`}
+    <p id="jsonMsg" class="note" style="margin:0"></p>${jsonHelp(false)}`}
 function pass(r,band){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&band!==f.band)return false;return true}
 const fmtLead=L=>L.map(([c,st,p])=>`${c==='all'?'全員':c.replace(/^(band|type|chara|skill|geki|bandtype):/,'').replace(':','・')} ${({all:'全',P:'P',T:'T',V:'V'})[st]}+${p}%`).join('／')||'—';
 function emptyNote(kind){return Object.values(state.roster[kind]).some(r=>r.own)?'':`<div class="banner"><b>まだ所持カードがありません。</b><span class="muted">「表示」を「全カード」にして、持っているカードの「所持」にチェックを入れてください。</span><button class="btn small" data-act="showAll">全カードを表示</button></div>`}
@@ -737,6 +738,47 @@ function viewEvent(){
 }
 function baseTable(key,label){const st=state.settings;
   return`<tr><th>${label}</th>${RANKS.map(r=>`<td><input type="number" data-set="${key}.${r}" value="${st[key][r]}" style="width:72px"></td>`).join('')}</tr>`}
+// 取り込み・書き出し用のJSON（カード名をキーにした簡易形式）
+function exportData(){
+  const pick=(r,fs)=>Object.fromEntries(fs.filter(f=>r[f]!=null&&!(f==='lock'||f==='excl')||r[f]).map(f=>[f,+r[f]]));
+  const m={},sn={};
+  for(const c of CAT.members){const r=state.roster.m[c.id];if(r&&r.own)m[c.title]=pick(r,['own','lv','tr','rk','sl','gl','lock','excl'])}
+  for(const c of CAT.snaps){const r=state.roster.s[c.id];if(r&&r.own)sn[c.title]=pick(r,['own','lv','rk','lock','excl'])}
+  const st=state.settings;
+  return{format:'ournotes-deck/1',settings:{charaRankLv:{...st.charaRankLv},bandItem:{...st.bandItem},vip:st.vip||0},roster:{m,s:sn}}}
+function jsonHelp(open){return`<details class="jsonhelp"${open?' open':''}><summary>JSONの形式（書き方）</summary>
+  <p class="note">「ファイルに書き出す」で出るファイルと同じ形です。読み込むと、<b>書いてある項目だけ</b>を上書きします（書いていないカードや項目はそのまま）。全部の項目を書く必要はありません。</p>
+<pre class="mono jsonfmt">{
+  "settings": {
+    "charaRankLv": { "燈": 26, "祥子": 31 },
+    "bandItem": { "MyGO!!!!!": 2.3, "Ave Mujica": 3.2 },
+    "vip": 15
+  },
+  "roster": {
+    "m": {
+      "魅せる光のリズム": { "own": 1, "lv": 90, "tr": 5, "rk": 5, "sl": 5, "gl": 5 }
+    },
+    "s": {
+      "カルペディエムの饗宴": { "own": 1, "lv": 90, "rk": 5 }
+    }
+  }
+}</pre>
+  <div class="tbl"><table><thead><tr><th>項目</th><th>意味</th><th>値</th></tr></thead><tbody>
+    <tr><td class="mono">settings.charaRankLv</td><td>キャラクターランク（キャラ名ごと）</td><td>1〜</td></tr>
+    <tr><td class="mono">settings.bandItem</td><td>バンドアイテムの全パラメータ%（バンド名ごと）</td><td>例 3.2</td></tr>
+    <tr><td class="mono">settings.vip</td><td>T.G.W CARD の全パラメータ%</td><td>例 15</td></tr>
+    <tr><td class="mono">roster.m</td><td>メンバー。キーはカード名（またはカードID）</td><td></td></tr>
+    <tr><td class="mono">roster.s</td><td>スナップ。キーはカード名（またはカードID）</td><td></td></tr>
+    <tr><td class="mono">own</td><td>所持（1＝持っている、0＝持っていない）</td><td>0 / 1</td></tr>
+    <tr><td class="mono">lv</td><td>レベル（上限を超えた値は上限に直します）</td><td>1〜90</td></tr>
+    <tr><td class="mono">tr</td><td>メンバーの特訓</td><td>1〜5</td></tr>
+    <tr><td class="mono">rk</td><td>メンバーの覚醒／スナップの上限解放</td><td>1〜5</td></tr>
+    <tr><td class="mono">sl</td><td>ライブスキルLv（メンバー）</td><td>1〜5</td></tr>
+    <tr><td class="mono">gl</td><td>撃奏スキルLv（メンバー）</td><td>1〜5</td></tr>
+    <tr><td class="mono">lock / excl</td><td>編成に必ず入れる／使わない（任意）</td><td>0 / 1</td></tr>
+  </tbody></table></div>
+  <p class="note">キャラ名：${CHARAS.map(esc).join('、')}<br>バンド名：${BAND_NAMES.map(esc).join('、')}<br>カード名はメンバー・スナップのタブに出ている名前です。</p>
+</details>`}
 function viewData(){const st=state.settings,nm=state.members.length,ns=state.snaps.length;
   const ranks=CHARAS.filter(c=>(st.charaRankLv?.[c]||1)>1).length;
   return`<div class="stack"><section class="panel stack"><h2>手持ちの保存・読み込み</h2>
@@ -753,21 +795,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
     <h3 style="margin:6px 0 0">キャラクターランク</h3>
     ${BAND_NAMES.map(b=>`<div class="row">${BANDS[b].map(c=>`<label class="f">${esc(c)}<input type="number" data-set="charaRankLv.${c}" value="${st.charaRankLv?.[c]??1}" step="1" min="1" style="width:64px"></label>`).join('')}</div>`).join('')}
   </section>
-  <section class="panel stack"><h2>JSONで手持ち・プレイヤー情報を更新する</h2>
-    <p class="note">次の形のJSONファイルを読み込むと、書いてある項目だけを上書きします（書いていないカードや項目はそのまま）。</p>
-<pre class="mono" style="font-size:12px;white-space:pre-wrap;overflow-x:auto">{
-  "settings": {
-    "charaRankLv": { "燈": 26, "祥子": 31 },
-    "bandItem": { "Ave Mujica": 3.2, "millsage": 5.5 },
-    "vip": 15
-  },
-  "roster": {
-    "m": { "魅せる光のリズム": { "own": 1, "lv": 90, "tr": 5, "rk": 4, "sl": 5, "gl": 4 } },
-    "s": { "カルペディエムの饗宴": { "own": 1, "lv": 90, "rk": 5 } }
-  }
-}</pre>
-    <p class="note">charaRankLv＝キャラクターランク、bandItem＝バンドアイテムの全パラメータ%、vip＝T.G.W CARD の全パラメータ%。roster.m はメンバー、roster.s はスナップで、キーはカード名（例 "魅せる光のリズム"）かカードIDです。own＝所持(1/0)、lv＝Lv、tr＝特訓、rk＝覚醒（スナップは上限解放）、sl＝ライブスキルLv、gl＝撃奏スキルLv。</p>
-  </section>
+  <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section>
   <section class="panel stack"><h2>このツールについて</h2>
     <p class="note">非公式のファンツールです。カード・楽曲のデータと計算式は、ゲームデータを解析した <a href="https://bdon.moe/" target="_blank" rel="noopener">bdon.moe</a> の公開情報にもとづきます。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。</p>
   </section></div>`;
@@ -863,7 +891,7 @@ document.addEventListener('click',e=>{
     case'clearRoster':if(!confirm('手持ちの登録をすべて消しますか？'))return;state.roster={m:{},s:{}};state.rosterSrc='';materialize();lastResult=null;break;
     case'goMembers':state.ui.tab='members';break;
     case'showAll':cardFilter().own='all';break;
-    case'exportFile':{const name='ournotes-deck-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(state);
+    case'exportFile':{const name='ournotes-deck-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(exportData(),null,1);
       (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){document.getElementById('json').value=data;msg('この表示ではファイル保存が使えません。下の欄のJSONをコピーして保存してください。');return}
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
