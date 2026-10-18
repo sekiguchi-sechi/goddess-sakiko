@@ -500,7 +500,11 @@ function polish2(t,f){t=JSON.parse(JSON.stringify(t));let cur=f(ev(t));
   return canon(t)}
 function optimizeF(f){
   let best=null;const R=Math.max(1,state.settings.restarts|0);
-  for(let r=0;r<R;r++){const t=randomTeam();if(!t)return null;const res=localSearch(t,f);if(!best||res.val>best.val)best={t:JSON.parse(JSON.stringify(res.t)),val:res.val}}
+  // 同じ最良値に何度も行き着いたら、それ以上の試行で良くなることはまずないので打ち切る
+  const STOP=state.settings.stopHits??8,MIN=Math.min(R,state.settings.minRestarts??40);let hits=0;
+  for(let r=0;r<R;r++){const t=randomTeam();if(!t)return null;const res=localSearch(t,f);
+    if(!best||res.val>best.val+1e-9){best={t:JSON.parse(JSON.stringify(res.t)),val:res.val};hits=1}else if(Math.abs(res.val-best.val)<=1e-9)hits++;
+    if(r+1>=MIN&&hits>=STOP)break}
   return canon(best.t);
 }
 // 並び順だけ違う同じ編成が毎回違って見えないよう、リーダーを先頭・残りはメンバー一覧順に並べ替える
@@ -539,6 +543,8 @@ function solve(song,obj){
   // 目標ランクごとに「必要スコアを満たす中でボーナス最大」を探す
   for(let r=0;r<RANKS.length;r++){
     const th=r===0?0:song.thr?.[RANKS[r]];if(r>0&&!(th>0))continue;const need=th/lowF();
+    // 制約なし（ボーナス最大）の編成がすでに届いているランクは、同じ編成が答えなので探索を省く
+    if(r>0&&frontier.length&&frontier[0].e.lo>=need)continue;
     // 主目的のボーナスが同じなら、もう一方のボーナス（pt↔アイテム）が高い編成を選ぶ
     const sub=bonusKey==='pt'?'it':'pt';
     const f0=e=>e.lo>=need?1e15+e[bonusKey]*1e6+e.lo*1e-3:e.lo;
