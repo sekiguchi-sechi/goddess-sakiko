@@ -580,7 +580,7 @@ function guidePanel(){
       ${st(false,`<b>目的と曲を選んで計算する</b>：この画面で目的（スコア最大・イベントpt最大など）と曲を選び、「最適編成を計算」を押します。`)}
     </ol>
     <div class="row">${nm?'':`<button class="btn small primary" data-act="goMembers">メンバーを登録する</button>`}${PUBLIC?'':'<button class="btn small" data-act="useAuthor">作者の手持ちで試す</button>'}</div>
-    <p class="note">非公式のファンツールです。計算式とカード・楽曲データは、ゲームデータを解析した <a href="https://bdon.moe/" target="_blank" rel="noopener">bdon.moe</a> の公開情報にもとづきます。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「予想スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
+    <p class="note">非公式のファンツールです。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「予想スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
   </details>`}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
@@ -802,7 +802,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
   </section>
   <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section>
   <section class="panel stack"><h2>このツールについて</h2>
-    <p class="note">非公式のファンツールです。カード・楽曲のデータと計算式は、ゲームデータを解析した <a href="https://bdon.moe/" target="_blank" rel="noopener">bdon.moe</a> の公開情報にもとづきます。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。</p>
+    <p class="note">非公式のファンツールです。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。</p>
   </section></div>`;
 }
 function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
