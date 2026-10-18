@@ -86,7 +86,7 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
-.altbox{border-top:1px dashed var(--line);padding-top:8px}.altbox>summary{cursor:pointer;font-size:13px}
+.panel.alt{border-style:dashed}
 .combo-opt small.gk{margin-left:6px;font-size:11px;color:var(--muted);white-space:nowrap}
 .frbox>summary{cursor:pointer}
 .jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--bg);padding:10px;border-radius:8px;margin:6px 0}
@@ -613,14 +613,29 @@ function viewOpt(){
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   </div>`;
 }
-// 次善編成（推定ランクが安定しないとき用）の表示
-function altBox(a,unit){if(!a)return'';const pct=Math.round((a.ratio-1)*1000)/10;
-  return`<details class="altbox"${state.ui.altOpen?' open':''} data-alt><summary><b>推定ランクに届かないとき（安定しないとき）の次善編成</b>${a.extra?`（同じランクで推定スコアの幅＋${a.extra}%）`:'（1つ下のランク）'}：${a.rank}・pt +${a.pt}%・アイテム +${a.it}%・${unit} ${fmt(a.val)}（${pct>=0?'+':''}${pct}%）</summary>
-    <div class="kpis" style="margin-top:8px"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${a.rank}</div></div>
-      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(a.P)}</div></div>
-      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(a.score)}</div><div class="mono muted" style="font-size:12px">${fmt(a.lo*lowF())} 〜 ${fmt(a.hi*highF())}</div></div>
-      <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${a.pt}% / +${a.it}%</div></div></div>
-    ${teamTable(a.slots)}</details>`}
+// 数値ブロック（最適・次善で同じレイアウト）
+function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
+  return`<div class="kpis">
+      <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
+      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(e.score)}</div><div class="mono muted" style="font-size:12px">${fmt(e.lo*lowF())} 〜 ${fmt(e.hi*highF())}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
+      <div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>
+      <div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>
+      <div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>
+      <div class="kpi"><div class="k">アイテム / 回</div><div class="v">${fmt(vals[1])}</div></div>
+      <div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>
+      ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
+        return`<div class="kpi"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
+        <div class="kpi" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
+      :`<div class="kpi"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`}
+    </div>`}
+function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
+      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
+      <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
+      <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
+const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
+const altTitle=a=>a.extra?`次善（同じランクで推定スコアの幅＋${a.extra}%）`:'次善（1つ下のランク）';
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
@@ -639,36 +654,25 @@ function renderResult(){
     const direct=Math.floor(((isPt?st.ptBase[Rk]:st.itemBase[Rk])||0)*(1+(isPt?e.pt:e.it)/100)*boost),cp=Math.floor((st.chGainBase[Rk]||0)*boost);
     chalHtml=`<div class="panel stack"><h2>チャレンジ — ${esc(C.song)}</h2>
     <p class="note">フリーライブ1回（LB${st.lb}）で：直接 ${fmt(direct)} ＋ チャレンジpt ${cp} → チャレンジライブ換算 ${fmt(cp*C.vpc)}（合計 ${fmt(direct+cp*C.vpc)}）。チャレンジpt 1あたり ${C.vpc.toFixed(1)}${isPt?'pt':'個'}。チャレンジライブではイベント対象カードの総合力がボーナス分上がります（パラメータボーナス）。</p>
-    <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
-      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
-      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
-      <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
-      <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div></details>
-    ${teamTable(C.slots)}${altBox(C.alt,'8倍1回')}</div>`}
+    ${kpiBox(chalKpis(C))}
+    ${teamTable(C.slots)}</div>${C.alt?`<div class="panel stack alt"><h2>チャレンジ ${altTitle(C.alt)} — ${esc(C.song)}</h2>
+    <p class="note">推定ランクに届かないとき（安定しないとき）はこちら。最適より ${Math.round((C.alt.ratio-1)*1000)/10}%。</p>
+    ${kpiBox(chalKpis({...C.alt,per1600:C.alt.val}))}
+    ${teamTable(C.alt.slots)}</div>`:''}`}
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
-    <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary><div class="kpis">
-      <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
-      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(e.score)}</div><div class="mono muted" style="font-size:12px">${fmt(e.lo*lowF())} 〜 ${fmt(e.hi*highF())}</div></div>
-      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
-      <div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>
-      <div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>
-      <div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>
-      <div class="kpi"><div class="k">アイテム / 回</div><div class="v">${fmt(vals[1])}</div></div>
-      <div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>
-      ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
-        return`<div class="kpi"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
-        <div class="kpi" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
-      :`<div class="kpi"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`}
-    </div>
-    <p class="note">スキル寄与 +${(e.Sk*100).toFixed(1)}%。${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
+    <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
+    <p class="note">${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-    ${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});return altBox({extra:a.extra,rank:RANKS[a.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:a.val,ratio:a.val/R.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===a.t.L))},R.chal?'1回あたり（チャレンジ換算込み）':'1回あたり')})():''}
     ${PUBLIC?'':`<details><summary>実プレイのスコアで係数Kを校正する</summary>
       <div class="row" style="margin-top:8px"><label class="f">この編成で出た実スコア<input type="number" id="calScore" style="width:130px" placeholder="例 3710000"></label><button class="btn small" data-act="calibrate">Kを更新</button><span class="note">今のK = ${song.K}。実スコア ÷ (総合力 × (1+スキル寄与)) を新しいKにします。</span></div>
     </details>`}
-  </div>${chalHtml}${fr}</div>`;
+  </div>${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});
+    return`<div class="panel stack alt"><h2>${R.chal?'フリー':esc(objLabel)} ${altTitle(a)} — ${esc(song.name)}</h2>
+    <p class="note">推定ランクに届かないとき（安定しないとき）はこちら。最適より ${Math.round((a.val/R.best.val-1)*1000)/10}%。</p>
+    ${kpiBox(freeKpis(R,a,e2))}
+    ${teamTable(e2.slots.map((x,i)=>slotRow(x,i===a.t.L)))}</div>`})():''}${chalHtml}${fr}</div>`;
 }
 
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
