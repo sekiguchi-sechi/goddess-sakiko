@@ -581,7 +581,6 @@ function guidePanel(){
       ${st(false,`<b>目的と曲を選んで計算する</b>：この画面で目的（スコア最大・イベントpt最大など）と曲を選び、「最適編成を計算」を押します。`)}
     </ol>
     <div class="row">${nm?'':`<button class="btn small primary" data-act="goMembers">メンバーを登録する</button>`}${PUBLIC?'':'<button class="btn small" data-act="useAuthor">作者の手持ちで試す</button>'}</div>
-    <p class="note">非公式のファンツールです。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「予想スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
   </details>`}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
@@ -598,6 +597,7 @@ function viewOpt(){
       <label class="f">予想スコアの幅 ±%<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
+    <p class="note">予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。ランクぎりぎりの編成は、「予想スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
   </section>
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   </div>`;
@@ -803,7 +803,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
   </section>
   <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section>
   <section class="panel stack"><h2>このツールについて</h2>
-    <p class="note">非公式のファンツールです。予想スコアの誤差の目安は、フリー・チャレンジで±3%、撃奏で±8%程度です。</p>
+    <p class="note">非公式のファンツールです。</p>
   </section></div>`;
 }
 function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
