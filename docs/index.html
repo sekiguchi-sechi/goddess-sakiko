@@ -26,7 +26,6 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
 header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-bottom:14px}
 h1{font-family:var(--f-display);font-weight:700;font-size:24px;margin:0;letter-spacing:.02em}
-h1 small{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:500;margin-left:8px}
 h2{font-family:var(--f-display);font-weight:700;font-size:18px;margin:0 0 10px;text-wrap:balance}
 h3{font-size:15px;margin:0 0 8px}
 p{margin:0 0 8px}
@@ -60,19 +59,12 @@ td input.w-l{width:150px}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;color:#fff;letter-spacing:.04em}
 .t-紅赤{background:var(--t-red)}.t-紺碧{background:var(--t-blue)}.t-翡翠{background:var(--t-green)}.t-山吹{background:var(--t-yellow)}.t-紫苑{background:var(--t-purple)}
 .pill{display:inline-block;font-family:var(--f-mono);font-weight:600;font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line)}
-.rank{font-family:var(--f-display);font-size:30px;line-height:1;color:var(--accent)}
 .banner{background:var(--soft);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
 .kpi .k{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em}
 .kpi .v{font-family:var(--f-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
 .kpi .v.r{font-family:var(--f-display);font-weight:700;color:var(--accent)}
-.slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
-.slot{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);display:flex;flex-direction:column;gap:4px}
-.slot.leader{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.slot .who{font-weight:700;font-size:15px}
-.slot .sub{font-size:12px;color:var(--muted)}
-.slot .snap{border-top:1px dashed var(--line);padding-top:4px;font-size:13px}
 tr.best td{background:var(--soft)}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 .note{font-size:12px;color:var(--muted);max-width:75ch}
@@ -117,9 +109,7 @@ const BAND_NAMES=Object.keys(BANDS);
 const CHARA_BAND={};for(const b of BAND_NAMES)for(const c of BANDS[b])CHARA_BAND[c]=b;
 const CHARAS=Object.keys(CHARA_BAND);
 const RANKS=['E','D','C','B','A','S','SS'];
-const RARITIES=['EX','SSR','SR','R'];
 const KEY='ournotes-deck-v1';
-
 
 const OWNER_RANK={};
 const OWNER_VIP=0;
@@ -133,9 +123,11 @@ const OBJECTIVES=[
 ];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const fmt=n=>Math.round(n).toLocaleString('ja-JP');
+// 手持ちの読み込み・書き出しボタン（メンバー・スナップ・データの各タブで共通）
+const IO_BTNS='<button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden>';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-// ===== 初期値・サンプル =====
+// ===== 初期値・状態（設定の既定値、イベント、カード一覧と手持ち、保存と移行） =====
 function defaultSettings(){return{
   // タイプリンク%＝typeLink×スナップの覚醒段階(1〜5)。実測: 覚醒5で25%、覚醒4で20%。vip=T.G.W CARDの全パラメータUP
   // 楽曲タイプ一致(タイプボーナス)・得意楽曲＝各%×メンバー覚醒段階。実測で両方5%/段階
@@ -162,56 +154,6 @@ function defaultSettings(){return{
   chItemBase:{E:2150,D:2150,C:2650,B:3400,A:4150,S:4900,SS:5650},
   chMult:8, lb:5,
 }}
-function M_(name,chara,rarity,type,power,awak,leader,skillPct,skillSec){
-  return{id:uid(),name,chara,rarity,type,power,awak,leader:leader.map(([cond,pct,stat])=>({cond,pct,stat:stat||'all'})),skillPct,skillSec,lock:false,excl:false}}
-function S_(name,rarity,type,band,corr,lb,ext){return{id:uid(),name,rarity,type,band,chara:'',corr,lb,ext,lock:false,excl:false}}
-function sampleState(){
-  return freshState();
-  const members=[
-    M_('例 SSR','凪','SSR','紅赤',121356,0,[['type:紅赤',102,'V'],['band:millsage',48,'V']],130,5),
-    M_('例 SSR','なつめ','SSR','紅赤',112400,0,[['type:紅赤',100,'P'],['band:millsage',40,'P']],120,6),
-    M_('例 SR(配布)','朋花','SR','紅赤',86300,4,[['type:紅赤',80,'T']],100,5),
-    M_('例 SSR','祥子','SSR','紫苑',118800,1,[['type:紫苑',100,'T'],['band:Ave Mujica',38,'T']],150,5),
-    M_('例 SSR','初華','SSR','紺碧',117900,0,[['all',90,'V']],150,5),
-    M_('例 SSR','燈','SSR','紺碧',114200,0,[['type:紺碧',100,'P']],120,6),
-    M_('例 SR','愛音','SR','山吹',88200,2,[['type:山吹',80,'V']],100,5),
-    M_('例 SSR','ユノ','SSR','紺碧',116500,0,[['band:夢限大みゅーたいぷ',120,'T']],130,5),
-    M_('例 SR','律','SR','紺碧',84700,4,[['type:紺碧',80,'P']],100,5),
-    M_('例 SR','まほろ','SR','翡翠',85900,1,[['type:翡翠',80,'T']],100,5),
-    M_('例 SSR','蓬咲','SSR','山吹',113800,0,[['type:山吹',100,'V']],120,5),
-    M_('例 SR','海鈴','SR','紫苑',87100,0,[['type:紫苑',80,'V']],100,5),
-    M_('例 R','蛍','R','紅赤',61200,4,[['type:紅赤',60,'P']],80,5),
-    M_('例 SR','楽奈','SR','翡翠',86800,0,[['all',60,'T']],110,5),
-  ];
-  const snaps=[
-    S_('例 赤橙の中','SSR','紅赤','millsage',30,0,4),
-    S_('例 きみのため','SSR','紅赤','millsage',28,1,4),
-    S_('例 光、手をかざして','SR','紅赤','millsage',22,4,2),
-    S_('例 夜明けの譜面','SSR','紫苑','Ave Mujica',30,0,4),
-    S_('例 青い呼吸','SSR','紺碧','MyGO!!!!!',29,0,4),
-    S_('例 放課後スタジオ','SR','山吹','一家Dumb Rock!',24,2,2),
-    S_('例 舞台袖','SR','紺碧','夢限大みゅーたいぷ',23,3,2),
-    S_('例 楽屋の鏡','SR','翡翠','',21,4,2),
-    S_('例 リハーサル','R','紅赤','',16,4,1),
-  ];
-  const songId=uid();
-  return{
-    sample:true, members, snaps,
-    songs:[{id:songId,name:'例：課題曲 EXPERT',type:'紅赤',band:'millsage',len:125,K:3.0,thr:{D:800000,C:1600000,B:2600000,A:3600000,S:4600000,SS:5600000}}],
-    event:{name:'例：お願い、サイドスロー（対象 millsage・紅赤）',rules:[
-      {id:uid(),label:'対象キャラ',card:'',chara:'',band:'millsage',type:'',target:'both',bonus:'20,23,26,29,32',param:''},
-      {id:uid(),label:'タイプ一致',card:'',chara:'',band:'',type:'紅赤',target:'both',bonus:'10,12,14,16,18',param:''},
-      {id:uid(),label:'SSR新規',card:'',chara:'凪',band:'',type:'紅赤',target:'member',bonus:'30,35,40,45,50',param:''},
-      {id:uid(),label:'SSR新規',card:'',chara:'なつめ',band:'',type:'紅赤',target:'member',bonus:'30,35,40,45,50',param:''},
-      {id:uid(),label:'報酬SR',card:'',chara:'朋花',band:'',type:'',target:'member',bonus:'15,17,20,22,25',param:''},
-      {id:uid(),label:'SSR新規',card:'赤橙の中',chara:'',band:'',type:'',target:'snap',bonus:'30,35,40,45,50',param:''},
-      {id:uid(),label:'SSR新規',card:'きみのため',chara:'',band:'',type:'',target:'snap',bonus:'30,35,40,45,50',param:''},
-      {id:uid(),label:'報酬SR',card:'光、手をかざして',chara:'',band:'',type:'',target:'snap',bonus:'15,17,20,22,25',param:''},
-    ]},
-    settings:defaultSettings(),
-    ui:{tab:'opt',song:songId,obj:'pt'},
-  };
-}
 const EV_DEF={label:'',card:'',chara:'',band:'',type:'',target:'both',bonus:'',param:''};
 function myEvent(id){const L=MY_DATA.events;const E=L&&L.events.find(e=>e.id===(id||L.current));
   return E?{presetId:E.id,name:E.name+'（'+E.period+'）',type:E.type||'',band:E.band||'',chSongs:E.chSongs||[],rules:E.rules.map(r=>({...EV_DEF,id:uid(),...r}))}:{name:'',rules:[]}}
@@ -581,10 +523,6 @@ const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,n
 function chip(t){return t?`<span class="chip t-${esc(t)}">${esc(t)}</span>`:''}
 function opts(list,val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+list.map(x=>{const[v,l]=Array.isArray(x)?x:[x,x];return`<option value="${esc(v)}"${String(v)===String(val)?' selected':''}>${esc(l)}</option>`}).join('')}
 function charaOpts(val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+BAND_NAMES.map(b=>`<optgroup label="${esc(b)}">${BANDS[b].map(c=>`<option${c===val?' selected':''}>${c}</option>`).join('')}</optgroup>`).join('')}
-const LEADER_STATS=[['all','全パラ'],['P','Pfm'],['T','Tec'],['V','Vis']];
-const LIVE_KINDS=['シンプル','判定','ライフ'],GEKI_KINDS=['JUST','COMBO','LUCK'];
-const LEADER_CONDS=[['','—'],['all','全員'],...TYPES.map(t=>['type:'+t,t+'のみ']),...BAND_NAMES.map(b=>['band:'+b,b+'のみ']),...LIVE_KINDS.map(k=>['skill:'+k,'スキル【'+k+'】']),...GEKI_KINDS.map(k=>['geki:'+k,'撃奏【'+k+'】'])];
-function sampleBanner(){return''}
 function curSong(){return state.songs.find(s=>s.id===state.ui.song)||state.songs[0]}
 
 function guidePanel(){
@@ -688,7 +626,7 @@ function filterBar(kind){const f=cardFilter();const own=Object.values(state.rost
   return`<div class="row"><label class="f">表示<select data-cf="own">${opts([['own','所持のみ'],['all','全カード'],['not','未所持のみ']],f.own)}</select></label>
     <label class="f">バンド<select data-cf="band">${opts(BAND_NAMES,f.band,'すべて')}</select></label>
     <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
-    <span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+    <span style="flex:1"></span>${IO_BTNS}</div>
     <p id="jsonMsg" class="note" style="margin:0"></p>${jsonHelp(false)}`}
 function pass(r,band){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&band!==f.band)return false;return true}
 const fmtLead=L=>L.map(([c,st,p])=>`${c==='all'?'全員':c.replace(/^(band|type|chara|skill|geki|bandtype):/,'').replace(':','・')} ${({all:'全',P:'P',T:'T',V:'V'})[st]}+${p}%`).join('／')||'—';
@@ -819,7 +757,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
   const ranks=CHARAS.filter(c=>(st.charaRankLv?.[c]||1)>1).length;
   return`<div class="stack"><section class="panel stack"><h2>手持ちの保存・読み込み</h2>
     <p class="note">入力はこのブラウザに自動保存されます。機種変更や別の端末で使うときは、ファイルに書き出して、移した先で読み込んでください。</p>
-    <div class="row"><span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+    <div class="row"><span style="flex:1"></span>${IO_BTNS}</div>
     <p id="jsonMsg" class="note"></p>
   </section>
   <section class="panel stack"><h2>プレイヤー情報</h2>
@@ -870,7 +808,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
   </section>
   <section class="panel stack"><h2>手持ちの保存・移行</h2>
     <p class="note">入力はこのブラウザに自動保存されます。機種変更や別の端末で使うときは、ファイルに書き出して、移した先で読み込んでください。</p>
-    <div class="row"><button class="btn small" data-act="useAuthor">作者の手持ちで試す</button><span style="flex:1"></span><button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+    <div class="row"><button class="btn small" data-act="useAuthor">作者の手持ちで試す</button><span style="flex:1"></span>${IO_BTNS}</div>
 
   </section>
   <section class="panel stack"><h2>データの保存・移行（テキスト）</h2>
@@ -931,13 +869,10 @@ document.addEventListener('click',e=>{
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
 
-    case'addMember':state.members.push(M_('', '燈','SSR','紺碧',0,0,[],100,5));state.sample=false;break;
-    case'addSnap':state.snaps.push(S_('','SR','紅赤','',20,0,2));state.sample=false;break;
     case'addSong':{const s={id:uid(),name:'新しい曲',type:'all',len:120,K:4.5,thr:{}};state.songs.push(s);break}
     case'loadEvent':{const id=document.getElementById('evPreset').value;state.event=myEvent(id);pickChSong(state.event);lastResult=null;break}
     case'addRule':state.event.rules.push({id:uid(),label:'',card:'',chara:'',band:'',type:'',target:'both',bonus:'',param:''});break;
     case'resetSettings':{const k=state.settings;state.settings={...defaultSettings(),charaRankLv:k.charaRankLv,bandItem:k.bandItem,vip:k.vip};break}
-    case'loadSample':useAuthor();lastResult=null;break;
     case'exportJson':document.getElementById('json').value=JSON.stringify(state,null,1);msg('現在のデータを表示しました。');return;
     case'copyJson':{const ta=document.getElementById('json');if(!ta.value)ta.value=JSON.stringify(state,null,1);
       navigator.clipboard?.writeText(ta.value).then(()=>msg('コピーしました。'),()=>{ta.select();msg('自動コピーできないため選択しました。Ctrl+Cでコピーしてください。')});return}
@@ -969,18 +904,18 @@ document.addEventListener('change',e=>{
   const tr=el.closest('tr[data-kind]');if(!tr||!el.dataset.f)return;
   const item=listOf(tr.dataset.kind).find(x=>x.id===tr.dataset.id);if(!item)return;
   const f=el.dataset.f;let v=el.type==='checkbox'?el.checked:(el.dataset.n!==undefined?(el.value===''?'':+el.value):el.value);
-  if(/^l[cps][01]$/.test(f)){const i=+f[2];item.leader||=[];item.leader[i]||={cond:'',pct:0,stat:'all'};const l=item.leader[i];
-    if(f[1]==='c')l.cond=v;else if(f[1]==='s')l.stat=v;else l.pct=v===''?0:v}
-  else if(/^p[PTV]$/.test(f)){item[f]=v;if(item.pP>0&&item.pT>0&&item.pV>0){item.power=item.pP+item.pT+item.pV;state.sample=false;lastResult=null;save();render();return}}
-  else if(f.startsWith('thr.')){item.thr||={};item.thr[f.slice(4)]=v===''?0:v}
+  if(f.startsWith('thr.')){item.thr||={};item.thr[f.slice(4)]=v===''?0:v}
   else item[f]=v;
-  state.sample=false;lastResult=null;save();
-  if(['chara','type','awak','lb','name','band','target','card','bonus','param'].includes(f))render();
+  lastResult=null;save();
+  if(['chara','type','name','band','target','card','bonus','param'].includes(f))render();
 });
-document.addEventListener('toggle',ev=>{const a=ev.target;if(a.matches&&a.matches('details[data-alt]')){state.ui.altOpen=a.open;document.querySelectorAll('details[data-alt]').forEach(x=>{if(x!==a&&x.open!==a.open)x.open=a.open});save()}},true);
-document.addEventListener('toggle',ev=>{const f=ev.target;if(f.matches&&f.matches('details[data-fr]')){state.ui.frOpen=f.open;save()}},true);
-document.addEventListener('toggle',ev=>{const g=ev.target;if(g.matches&&g.matches('details[data-guide]')){state.ui.guide=g.open;save();return}},true);
-document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches||!d.matches('details[data-kpi]'))return;state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open});save()},true);
+// 開閉の状態を覚える（次に開いたときも同じ）。スコア・ボーナスはフリーとチャレンジで連動
+document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
+  if(d.matches('details[data-kpi]')){state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open})}
+  else if(d.matches('details[data-fr]'))state.ui.frOpen=d.open;
+  else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
+  else return;
+  save()},true);
 function runOpt(){
   const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}
   setTimeout(()=>{
