@@ -271,7 +271,8 @@ function ruleMatch(r,c,kind){
   let any=false;
   if(r.card){any=true;const nz=x=>String(x||'').normalize('NFKC');if(!nz(c.name).includes(nz(r.card)))return false}
   if(r.chara){any=true;if(c.chara!==r.chara)return false}
-  if(r.band){any=true;if(c.band!==r.band)return false}
+  // バンドなしのスナップ（事前登録KV）はどのバンド指定のボーナスも受ける（ゲーム内で32%表示を確認）
+  if(r.band){any=true;if(c.band!==r.band&&!(kind==='snap'&&!c.band))return false}
   if(r.type){any=true;if(c.type!==r.type)return false}
   return any;
 }
