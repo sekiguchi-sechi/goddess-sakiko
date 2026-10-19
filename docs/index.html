@@ -78,6 +78,15 @@ details summary{cursor:pointer;font-weight:700}
 .combo-opt{flex-shrink:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.kpibox>summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px;margin-bottom:6px}
 tr.dim td{opacity:.55}
+.fchips{display:flex;flex-wrap:wrap;gap:6px 18px}
+.fgroup{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.flabel{font-size:12px;color:var(--muted);font-weight:500;margin-right:2px}
+button.fchip{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:99px;padding:2px 10px;cursor:pointer}
+button.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.fchip.chip{color:#fff;border-color:transparent;opacity:.45;padding:2px 10px;letter-spacing:.04em}
+button.fchip.chip.on{opacity:1;box-shadow:0 0 0 2px var(--ink)}
+button.fchip.t-紅赤{background:var(--t-red)}button.fchip.t-紺碧{background:var(--t-blue)}button.fchip.t-翡翠{background:var(--t-green)}button.fchip.t-山吹{background:var(--t-yellow)}button.fchip.t-紫苑{background:var(--t-purple)}
+button.fclear{font:inherit;font-size:11px;border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:2px 4px}
 .panel.alt{border-style:dashed}
 .combo-opt small.gk{margin-left:6px;font-size:11px;color:var(--muted);white-space:nowrap}
 .frbox>summary{cursor:pointer}
@@ -621,7 +630,8 @@ function renderResult(){
 
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
 const n5=[1,2,3,4,5];
-function cardFilter(){const f=state.ui.cf||{own:'own',band:''};f.rarity??='';f.type??='';f.sort??='band';state.ui.cf=f;return f}
+// 絞り込み: バンド・レア度・タイプは複数選択（空＝すべて）。旧形式（1つの文字列）は配列に直す
+function cardFilter(){const f=state.ui.cf||{own:'own'};for(const k of ['band','rarity','type'])f[k]=Array.isArray(f[k])?f[k]:(f[k]?[f[k]]:[]);f.sort??='band';state.ui.cf=f;return f}
 const RARITY_ORDER=['SSR','SR','R'];
 // 並べ替え: バンド順（既定）／レア度順／タイプ順。同じ値の中は既定の順（メンバーはバンド→キャラ→新しい順、スナップはバンド→新しい順）
 function sortCards(list,kind){const f=cardFilter();const base=kind==='m'?(a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||CHARAS.indexOf(a.chara)-CHARAS.indexOf(b.chara)||b.id-a.id:(a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||b.id-a.id;
@@ -629,14 +639,15 @@ function sortCards(list,kind){const f=cardFilter();const base=kind==='m'?(a,b)=>
   return [...list].sort(key?(a,b)=>key(a)-key(b)||base(a,b):base)}
 function filterBar(kind){const f=cardFilter();const own=Object.values(state.roster[kind]).filter(r=>r.own).length;
   return`<div class="row"><label class="f">表示<select data-cf="own">${opts([['own','所持のみ'],['all','全カード'],['not','未所持のみ']],f.own)}</select></label>
-    <label class="f">バンド<select data-cf="band">${opts(BAND_NAMES,f.band,'すべて')}</select></label>
-    <label class="f">レア度<select data-cf="rarity">${opts(RARITY_ORDER,f.rarity,'すべて')}</select></label>
-    <label class="f">タイプ<select data-cf="type">${opts(TYPES,f.type,'すべて')}</select></label>
     <label class="f">並べ替え<select data-cf="sort">${opts([['band','バンド順'],['rarity','レア度順'],['type','タイプ順']],f.sort)}</select></label>
     <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
     <span style="flex:1"></span>${IO_BTNS}</div>
+    <div class="fchips">${fGroup('band','バンド',BAND_NAMES.map(b=>[b,b]))}${fGroup('rarity','レア度',RARITY_ORDER.map(r=>[r,r]))}${fGroup('type','タイプ',TYPES.map(t=>[t,t]),true)}</div>
     <p id="jsonMsg" class="note" style="margin:0"></p>${jsonHelp(false)}`}
-function pass(r,c){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&c.band!==f.band)return false;if(f.rarity&&c.rarity!==f.rarity)return false;if(f.type&&c.type!==f.type)return false;return true}
+// 絞り込みボタン（押すたびに選択・解除。何も選ばないと「すべて」）
+function fGroup(key,label,items,typed){const sel=cardFilter()[key];
+  return`<div class="fgroup"><span class="flabel">${label}</span>${items.map(([v,l])=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${sel.includes(v)?' on':''}" data-cft="${key}" data-v="${esc(v)}" aria-pressed="${sel.includes(v)}">${esc(l)}</button>`).join('')}${sel.length?`<button type="button" class="fclear" data-cft="${key}" data-v="">解除</button>`:''}</div>`}
+function pass(r,c){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band.length&&!f.band.includes(c.band))return false;if(f.rarity.length&&!f.rarity.includes(c.rarity))return false;if(f.type.length&&!f.type.includes(c.type))return false;return true}
 const fmtLead=L=>L.map(([c,st,p])=>`${c==='all'?'全員':c.replace(/^(band|type|chara|skill|geki|bandtype):/,'').replace(':','・')} ${({all:'全',P:'P',T:'T',V:'V'})[st]}+${p}%`).join('／')||'—';
 function emptyNote(kind){return Object.values(state.roster[kind]).some(r=>r.own)?'':`<div class="banner"><b>まだ所持カードがありません。</b><span class="muted">「表示」を「全カード」にして、持っているカードの「所持」にチェックを入れてください。</span><button class="btn small" data-act="showAll">全カードを表示</button></div>`}
 function viewMembers(){
@@ -873,6 +884,7 @@ document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');if(tb){state.ui.tab=tb.dataset.tab;save();render();return}
   const sh=e.target.closest('[data-show]');if(sh){const i=+sh.dataset.show;shownIdx=lastResult.frontier[i]===lastResult.best?null:i;document.getElementById('result').innerHTML=renderResult();return}
   const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=null;save();render();return}
+  const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
