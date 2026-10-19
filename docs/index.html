@@ -512,7 +512,7 @@ function solve(song,obj){
 }
 
 // ===== 描画 =====
-const TABS=PUBLIC?[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['settings','データ']]:[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
+const TABS=PUBLIC?[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
 let lastResult=null,shownIdx=null;
 function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
@@ -621,18 +621,26 @@ function renderResult(){
 
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
 const n5=[1,2,3,4,5];
-function cardFilter(){const f=state.ui.cf||{own:'own',band:''};state.ui.cf=f;return f}
+function cardFilter(){const f=state.ui.cf||{own:'own',band:''};f.rarity??='';f.type??='';f.sort??='band';state.ui.cf=f;return f}
+const RARITY_ORDER=['SSR','SR','R'];
+// 並べ替え: バンド順（既定）／レア度順／タイプ順。同じ値の中は既定の順（メンバーはバンド→キャラ→新しい順、スナップはバンド→新しい順）
+function sortCards(list,kind){const f=cardFilter();const base=kind==='m'?(a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||CHARAS.indexOf(a.chara)-CHARAS.indexOf(b.chara)||b.id-a.id:(a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||b.id-a.id;
+  const key={rarity:c=>RARITY_ORDER.indexOf(c.rarity),type:c=>TYPES.indexOf(c.type)}[f.sort];
+  return [...list].sort(key?(a,b)=>key(a)-key(b)||base(a,b):base)}
 function filterBar(kind){const f=cardFilter();const own=Object.values(state.roster[kind]).filter(r=>r.own).length;
   return`<div class="row"><label class="f">表示<select data-cf="own">${opts([['own','所持のみ'],['all','全カード'],['not','未所持のみ']],f.own)}</select></label>
     <label class="f">バンド<select data-cf="band">${opts(BAND_NAMES,f.band,'すべて')}</select></label>
+    <label class="f">レア度<select data-cf="rarity">${opts(RARITY_ORDER,f.rarity,'すべて')}</select></label>
+    <label class="f">タイプ<select data-cf="type">${opts(TYPES,f.type,'すべて')}</select></label>
+    <label class="f">並べ替え<select data-cf="sort">${opts([['band','バンド順'],['rarity','レア度順'],['type','タイプ順']],f.sort)}</select></label>
     <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
     <span style="flex:1"></span>${IO_BTNS}</div>
     <p id="jsonMsg" class="note" style="margin:0"></p>${jsonHelp(false)}`}
-function pass(r,band){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&band!==f.band)return false;return true}
+function pass(r,c){const f=cardFilter();const own=!!(r&&r.own);if(f.own==='own'&&!own)return false;if(f.own==='not'&&own)return false;if(f.band&&c.band!==f.band)return false;if(f.rarity&&c.rarity!==f.rarity)return false;if(f.type&&c.type!==f.type)return false;return true}
 const fmtLead=L=>L.map(([c,st,p])=>`${c==='all'?'全員':c.replace(/^(band|type|chara|skill|geki|bandtype):/,'').replace(':','・')} ${({all:'全',P:'P',T:'T',V:'V'})[st]}+${p}%`).join('／')||'—';
 function emptyNote(kind){return Object.values(state.roster[kind]).some(r=>r.own)?'':`<div class="banner"><b>まだ所持カードがありません。</b><span class="muted">「表示」を「全カード」にして、持っているカードの「所持」にチェックを入れてください。</span><button class="btn small" data-act="showAll">全カードを表示</button></div>`}
 function viewMembers(){
-  const rows=[...CAT.members].sort((a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||CHARAS.indexOf(a.chara)-CHARAS.indexOf(b.chara)||b.id-a.id).filter(c=>pass(state.roster.m[c.id],c.band)).map(c=>{
+  const rows=sortCards(CAT.members,'m').filter(c=>pass(state.roster.m[c.id],c)).map(c=>{
     const r0=state.roster.m[c.id],r=r0||{...newMR(c),own:0},own=!!r.own,[P,T,V]=mStats(c,r);const e=evBonus({name:c.title,chara:c.chara,band:c.band,type:c.type,awak:r.rk-1},'member');
     return`<tr data-kind="cm" data-id="${c.id}" class="${own?'':'dim'}">
     <td><input data-f="own" type="checkbox"${own?' checked':''}></td>
@@ -654,7 +662,7 @@ function viewMembers(){
   <tbody>${rows}</tbody></table></div></div>`;
 }
 function viewSnaps(){
-  const rows=[...CAT.snaps].sort((a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||b.id-a.id).filter(c=>pass(state.roster.s[c.id],c.band)).map(c=>{
+  const rows=sortCards(CAT.snaps,'s').filter(c=>pass(state.roster.s[c.id],c)).map(c=>{
     const r0=state.roster.s[c.id],r=r0||{...newSR(c),own:0},own=!!r.own,[cP,cT,cV]=sStats(c,r),sk=c.rk[r.rk-1],ex=c.ext[sk[1]-1]||[0,0],g=c.gk[sk[2]-1]||[0,0];
     const e=evBonus({name:c.title,chara:c.chara,band:c.band,type:c.type,lb:r.rk-1},'snap');
     return`<tr data-kind="cs" data-id="${c.id}" class="${own?'':'dim'}">
@@ -675,7 +683,16 @@ function viewSnaps(){
   <div class="tbl"><table><thead><tr><th>所持</th><th>固定</th><th>除外</th><th>スナップ名</th><th>レア</th><th>タイプ</th><th>バンド</th><th>キャラ</th><th>Lv</th><th>上限解放</th><th>補正 P/T/V</th><th>スキル延長</th><th>撃奏サポート</th><th>イベント補正</th></tr></thead>
   <tbody>${rows}</tbody></table></div></div>`;
 }
-function viewSongs(){
+// 公開版の楽曲一覧（閲覧のみ）: 曲名・バンド・タイプ・長さ・撃奏区間・ランクの必要スコア
+function viewSongList(){const q=(state.ui.songQ||'').normalize('NFKC').toLowerCase();
+  const list=state.songs.filter(s=>!q||s.name.normalize('NFKC').toLowerCase().includes(q));
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">楽曲</h2>
+    <div class="row"><label class="f">曲名で検索<input id="songQ" value="${esc(state.ui.songQ||'')}" placeholder="曲名の一部" style="width:220px"></label><span class="muted">${list.length}曲 / 全${state.songs.length}曲</span></div>
+    <p class="note">難易度は EXPERT（譜面データが無い曲は HARD）。必要スコアはフリー・チャレンジライブのランクの基準です。</p></section>
+  <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>バンド</th><th>タイプ</th><th class="num">長さ</th><th>撃奏区間</th>${['A','S','SS'].map(r=>`<th class="num">${r}</th>`).join('')}</tr></thead><tbody>
+  ${list.map(s=>`<tr><td>${esc(s.name)}</td><td style="font-size:12px">${esc(s.band||'—')}</td><td>${chip(s.type==='all'?'':s.type)}</td><td class="num">${Math.round(s.len||0)}秒</td><td style="font-size:12px">${gkLabel(s.id).replace(/<[^>]+>/g,'').trim()||'—'}</td>${['A','S','SS'].map(r=>`<td class="num">${s.thr?.[r]?fmt(s.thr[r]):'—'}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div></div>`}
+function viewSongs(){if(PUBLIC)return viewSongList();
   return`<div class="stack"><section class="panel stack">
     <div class="row"><h2 style="margin:0">楽曲</h2><button class="btn small primary" data-act="addSong">＋ 追加</button></div>
     <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。<b>スコア係数K</b>は「推定スコア ÷ (総合力 × (1+スキル寄与))」。自分のプレイ精度もここに含まれるので、最適化タブで実スコアから校正するのが確実です。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
@@ -865,7 +882,7 @@ document.addEventListener('click',e=>{
     case'goMembers':state.ui.tab='members';break;
     case'showAll':cardFilter().own='all';break;
     case'exportFile':{const name='ournotes-deck-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(exportData(),null,1);
-      (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){document.getElementById('json').value=data;msg('この表示ではファイル保存が使えません。下の欄のJSONをコピーして保存してください。');return}
+      (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);msg('書き出しました（ダウンロードフォルダを確認してください）。');return}
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
 
@@ -892,6 +909,7 @@ document.addEventListener('change',e=>{
   if(el.id==='evName'){state.event.name=el.value;save();return}
   if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
+  if(el.id==='songQ'){state.ui.songQ=el.value;save();render();document.getElementById('songQ')?.focus();return}
   if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
   const ctr=el.closest('tr[data-kind="cm"],tr[data-kind="cs"]');
   if(ctr&&el.dataset.f){const k=ctr.dataset.kind==='cm'?'m':'s',id=ctr.dataset.id,c=(k==='m'?CM:CSN)[id],f=el.dataset.f;
