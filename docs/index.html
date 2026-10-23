@@ -153,9 +153,9 @@ function defaultSettings(){return{
   // 区間の勝ちやすさ: 強さ＝撃奏スキルの種類が一致するメンバー数＋撃奏サポートの種類が一致するスナップ数。
   // 勝率の目安 = 0.25＋0.25×(強さ−5)（0.25〜1）。全区間1位の実績: 強さ9〜10、全敗のSymbol III: 強さ5（撃奏BONUSは1位時の約3割）
   gkWinAt:9, gkLoseAt:5,
-  typeLink:5, musicType:5, tokui:5, vip:0, skillEff:0.51, uniqueChara:true, margin:4, orderZ:1.28, scoreAdj:1.005, restarts:100,
+  typeLink:5, musicType:5, tokui:5, vip:0, skillEff:0.51, uniqueChara:true, margin:1, orderZ:1.28, scoreAdj:1.005, restarts:100,
   bandItem:Object.fromEntries(BAND_NAMES.map(b=>[b,0])),
-  ver:27,
+  ver:28,
   // E は情報なし。閾値未入力でも比較できるよう D と同値で置く
   ptBase:{E:15,D:15,C:25,B:35,A:50,S:75,SS:100},
   itemBase:{E:18,D:18,C:30,B:42,A:60,S:90,SS:120},
@@ -224,6 +224,8 @@ if(state.settings&&state.settings.ver<18){Object.assign(state.settings,{gkQ:150,
   if(state.settings&&state.settings.ver<25){state.settings.vip=15;state.settings.ver=25}
   if(state.settings&&state.settings.ver<26){state.settings.charaRankLv={...OWNER_RANK};state.settings.ver=26}
   if(state.settings&&state.settings.ver<27){state.settings.ver=27}
+  // 発動順120通りの厳密計算で誤差が±0.3%程度になったので、既定の余裕 4% を 1% に（自分で変えた値はそのまま）
+  if(state.settings&&state.settings.ver<28){if(state.settings.margin===4)state.settings.margin=1;state.settings.ver=28}
   if(state.settings&&state.settings.ver<17){Object.assign(state.settings,{gkQ:155,gkQLose:75,gkJudge:28,gkWinAt:11,gkLoseAt:6,ver:17});state.settings.gkEff={COMBO:17,JUST:3,LUCK:11}}
   if(state.settings&&state.settings.ver<16){Object.assign(state.settings,{gkQ:162,gkBase:{COMBO:0,JUST:32,LUCK:0},ver:16});state.settings.gkEff={...(state.settings.gkEff||{}),JUST:17}}
     if(state.settings&&state.settings.ver<15){if(state.settings.gkEff?.COMBO===18)state.settings.gkEff.COMBO=17;state.settings.ver=15}
@@ -402,7 +404,7 @@ function bestAssign(A,sign){const dp=new Float64Array(32).fill(-Infinity);dp[0]=
 // 表示用: 120通りすべてのスコア（昇順）。PERMS[p][k]=k番目の枠で発動するメンバー
 const PERMS=(()=>{const out=[],a=[0,1,2,3,4],go=(n)=>{if(n===5){out.push(a.slice());return}for(let i=n;i<5;i++){[a[n],a[i]]=[a[i],a[n]];go(n+1);[a[n],a[i]]=[a[i],a[n]]}};go(0);return out})();
 function orders120(A,PK,b){return PERMS.map(p=>{let s=b;for(let k=0;k<5;k++)s+=A[p[k]][k];return{s:PK*s,p}}).sort((x,y)=>x.s-y.s)}
-// 推定スコアは ±margin% の幅で扱い、ランクは幅の下限（確実に届く値）で判定する
+// ランク判定の余裕: スキル順が悪いほうに寄ったスコア（lo）から margin% を引いても届くかで判定する
 const lowF=()=>1-state.settings.margin/100, highF=()=>1+state.settings.margin/100;
 function rankRaw(score,song){const T=CTX?.gk?song.gkThr:song.thr;let r=0;for(let i=1;i<RANKS.length;i++){const th=T?.[RANKS[i]];if(th>0&&score>=th)r=i}return r}
 function rankOf(score,song){return rankRaw(score*lowF(),song)}
@@ -542,7 +544,7 @@ function solve(song,obj){
   // 価値が同じなら、もう一方のボーナス→スコアの高い方（同点の選び方で毎回結果が変わらないように）
   const sub=bonusKey==='pt'?'it':'pt';
   const best=fr.reduce((a,b)=>!a||b.val>a.val||(b.val===a.val&&(b.e[sub]>a.e[sub]||(b.e[sub]===a.e[sub]&&b.e.score>a.e.score)))?b:a,null);
-  // 次善（安定重視）: 推定ランクはそのままで、推定スコアの幅を +3% 広げても届く中でボーナス最大の編成
+  // 次善（安定重視）: 推定ランクはそのままで、ランク判定の余裕を +3% 広げても届く中でボーナス最大の編成
   let safe=null;
   if(best&&best.rank>0){const SAFE=state.settings.safeExtra??3,th=song.thr?.[RANKS[best.rank]]||0,need2=th/(1-(state.settings.margin+SAFE)/100);
     const g=e=>e.lo>=need2?1e15+e[bonusKey]*1e6+e[sub]*1e2+e.lo*1e-5:e.lo;const t=optimizeF(g);const p=pack(t);
@@ -588,11 +590,11 @@ function viewOpt(){
       <label class="f${useCh?'':' dim'}" title="${useCh?'':'この目的では使いません'}">チャレンジ楽曲${useCh?'':'（この目的では不使用）'}${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||song)?.name||''))}</label>
       <label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>
       <label class="f${useMult?'':' dim'}" title="${useMult?'':'この目的では使いません'}">チャレンジ消費倍率${useMult?'':'（この目的では不使用）'}<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>
-      <label class="f">推定スコアの幅 ±%<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
+      <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
       ${o==='gkscore'?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>`:''}
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
-    <p class="note">推定スコアの誤差の目安は、フリー・チャレンジで±1%、撃奏で±10%程度です（撃奏は区間すべて1位の場合。LUCKは抽選、JUSTは自分の精度で上下します）。ランクぎりぎりの編成は、「推定スコアの幅」を3%程度にして選ぶのがおすすめです。</p>
+    <p class="note">推定スコアの誤差の目安は、フリー・チャレンジで±0.3%（AP時）、撃奏で±10%程度です（撃奏は区間すべて1位の場合。LUCKは抽選、JUSTは自分の精度で上下します）。ミスやGREATが出やすい曲は「ランク判定の余裕」を2〜3%にしてください。</p>
   </section>
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   <div id="tools">${toolsHtml()}</div>
@@ -609,7 +611,7 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
 function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   return`<div class="kpis">
       <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
-      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(e.score)}</div><div class="mono muted" style="font-size:12px">${fmt(e.lo*lowF())} 〜 ${fmt(e.hi*highF())}</div></div>
+      <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
       ${ordKpis(R,P,e)}
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
       <div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>
@@ -624,11 +626,11 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
     </div>`}
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
-      <div class="kpi"><div class="k">推定スコア（幅）</div><div class="v">${fmt(C.score)}</div>${C.lo?`<div class="mono muted" style="font-size:12px">${fmt(C.lo*lowF())} 〜 ${fmt(C.hi*highF())}</div>`:''}</div>
+      <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(C.score)}</div></div>
       <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
-const altTitle=a=>a.extra?`次善（同じランクで推定スコアの幅＋${a.extra}%）`:'次善（1つ下のランク）';
+const altTitle=a=>a.extra?`次善（同じランクで余裕を＋${a.extra}%）`:'次善（1つ下のランク）';
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
@@ -638,8 +640,8 @@ function renderResult(){
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const slots=teamTable(e.slots.map((x,i)=>slotRow(x,i===P.t.L)));
-  const fr=R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">予想の中央に必要</th><th class="num">推定スコアの幅</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
-    ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${fmt(p.e.lo*lowF())} 〜 ${fmt(p.e.hi*highF())}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
+  const fr=R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">余裕込みの必要スコア</th><th class="num">発動順の最低〜最高</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
+    ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${p.e.ord?`${fmt(p.e.ord[0].s)} 〜 ${fmt(p.e.ord[p.e.ord.length-1].s)}`:'—'}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
     </tbody></table></div></details>`:'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
   const C=R.chal;let chalHtml='';
@@ -655,12 +657,9 @@ function renderResult(){
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
-    <p class="note">${(()=>{const up=rankRaw(e.hi*highF(),song),mid=rankRaw(e.score,song);return up>P.rank?`上振れすれば ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
+    <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-    ${PUBLIC?'':`<details><summary>実プレイのスコアで係数Kを校正する</summary>
-      <div class="row" style="margin-top:8px"><label class="f">この編成で出た実スコア<input type="number" id="calScore" style="width:130px" placeholder="例 3710000"></label><button class="btn small" data-act="calibrate">Kを更新</button><span class="note">今のK = ${song.K}。実スコア ÷ (総合力 × (1+スキル寄与)) を新しいKにします。</span></div>
-    </details>`}
   </div>${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});
     return`<div class="panel stack alt"><h2>${R.chal?'フリー':esc(objLabel)} ${altTitle(a)} — ${esc(song.name)}</h2>
     <p class="note">推定ランクに届かないとき（安定しないとき）はこちら。最適より ${Math.round((a.val/R.best.val-1)*1000)/10}%。</p>
@@ -920,9 +919,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
       <label class="f">タイプボーナス（楽曲タイプ一致）：メンバー覚醒1段階あたり %<input type="number" data-set="musicType" value="${st.musicType}" step="0.5"></label>
       <label class="f">得意楽曲：メンバー覚醒1段階あたり %<input type="number" data-set="tokui" value="${st.tokui}" step="0.5"></label>
       <label class="f"><input type="checkbox" data-set="gkReq" ${st.gkReq!==false?'checked':''}> 撃奏：勝てる編成の条件を必須にする（JUSTスキル4人＋判定幅スナップ2枚／COMBOスキル4人／LUCKスキル2人）</label>
-      <label class="f">スキル実効係数（撃奏・データ無し曲用）<input type="number" data-set="skillEff" value="${st.skillEff}" step="0.01"></label>
-      <label class="f">スコア全体補正（実測との差）<input type="number" data-set="scoreAdj" value="${st.scoreAdj??1.005}" step="0.005"></label>
-      <label class="f">スキル順の悪いケースの見込み（σ倍）<input type="number" data-set="orderZ" value="${st.orderZ??1.28}" step="0.1"></label>
+      <label class="f">ランク判定に使うスキル順の悪いケース（ばらつきの何倍下か）<input type="number" data-set="orderZ" value="${st.orderZ??1.28}" step="0.1"></label>
       <label class="f">T.G.W CARD 全パラメータ %<input type="number" data-set="vip" value="${st.vip}" step="1"></label>
       <label class="f">探索の試行回数<input type="number" data-set="restarts" value="${st.restarts}" min="1"></label>
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-set="uniqueChara"${st.uniqueChara?' checked':''}>同じキャラを2人入れない</label>
@@ -1022,8 +1019,6 @@ document.addEventListener('click',e=>{
     case'copyJson':{const ta=document.getElementById('json');if(!ta.value)ta.value=JSON.stringify(state,null,1);
       navigator.clipboard?.writeText(ta.value).then(()=>msg('コピーしました。'),()=>{ta.select();msg('自動コピーできないため選択しました。Ctrl+Cでコピーしてください。')});return}
     case'importJson':try{const o=JSON.parse(document.getElementById('json').value);if(!o.roster&&!Array.isArray(o.members))throw 0;state=o;normalize();lastResult=null;save();render();msg('読み込みました。')}catch(_){msg('JSONとして読めませんでした。「JSONを表示」で出した形式のまま貼り付けてください。')}return;
-    case'calibrate':{const v=+document.getElementById('calScore').value;if(!(v>0))return;const song=state.songs.find(x=>x.id===lastResult.songId)||curSong();const P=shownIdx!=null?lastResult.frontier[shownIdx]:lastResult.best;
-      prep(song,lastResult.obj==='chscore');const e=ev(P.t);if(CTX.sw)song.kf=+(v/(e.free/CTX.kf)).toFixed(4);else song.K=+(v/(e.P*(1+e.Sk))).toFixed(4);save();runOpt();return}
   }
   save();render();
 });
