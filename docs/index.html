@@ -741,15 +741,14 @@ function viewSongList(){const q=(state.ui.songQ||'').normalize('NFKC').toLowerCa
 function viewSongs(){if(PUBLIC)return viewSongList();
   return`<div class="stack"><section class="panel stack">
     <div class="row"><h2 style="margin:0">楽曲</h2><button class="btn small primary" data-act="addSong">＋ 追加</button></div>
-    <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。<b>スコア係数K</b>は「推定スコア ÷ (総合力 × (1+スキル寄与))」。自分のプレイ精度もここに含まれるので、最適化タブで実スコアから校正するのが確実です。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
+    <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。スコアは曲ごとの重み表（haneoka の計算エンジンから取得）で計算します。重み表の無い曲を追加した場合は、最適化タブで実スコアから補正してください。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
   </section>
-  <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>曲タイプ</th><th>得意楽曲のバンド</th><th class="num">長さ(秒)</th><th class="num">係数K</th>${RANKS.slice(1).map(r=>`<th class="num">${r}</th>`).join('')}<th></th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>曲タイプ</th><th>得意楽曲のバンド</th><th class="num">長さ(秒)</th>${RANKS.slice(1).map(r=>`<th class="num">${r}</th>`).join('')}<th></th></tr></thead><tbody>
   ${state.songs.map(s=>`<tr data-kind="songs" data-id="${s.id}">
     <td><input data-f="name" class="w-l" value="${esc(s.name)}"></td>
     <td><select data-f="type">${opts([['all','全タイプ'],...TYPES],s.type)}</select></td>
     <td><select data-f="band">${opts(BAND_NAMES,s.band||'','—')}</select></td>
     <td><input data-f="len" data-n type="number" class="w-s" value="${s.len}"></td>
-    <td><input data-f="K" data-n type="number" class="w-s" step="0.01" value="${s.K}"></td>
     ${RANKS.slice(1).map(r=>`<td><input data-f="thr.${r}" data-n type="number" style="width:100px" value="${s.thr?.[r]??''}"></td>`).join('')}
     <td><button class="btn small" data-del>削除</button></td></tr>`).join('')}
   </tbody></table></div></div>`;
