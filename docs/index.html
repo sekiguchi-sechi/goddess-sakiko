@@ -703,10 +703,12 @@ function paintTools(){const el=document.getElementById('tools');if(el)el.innerHT
 // 楽曲比較: 全曲を順に最適化
 function startCompare(){
   const id=++toolRun,obj=state.ui.obj;
-  const list=state.songs.filter(s=>obj==='gkscore'?s.gkTypes?.length:(s.thr?.SS>0));
+  // チャレンジのスコアは課題楽曲（chSong）で計算されるので、曲ごとに課題楽曲を差し替えて比べる。対象はイベントの課題曲（無ければ全曲）
+  const chNames=state.event?.chSongs||[];
+  const list=state.songs.filter(s=>obj==='gkscore'?s.gkTypes?.length:obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
   toolOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintTools();
   const step=()=>{if(id!==toolRun)return;const s=list[toolOut.done];
-    let r;try{seedRnd(12345);r=withFast(()=>solve(s,obj))}catch(e){r={error:String(e)}}
+    let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=withFast(()=>solve(s,obj))}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
     const b=r.best;toolOut.rows.push(b?{id:s.id,name:s.name,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
     toolOut.done++;if(toolOut.done>=toolOut.total)CHAL_CACHE=null;paintTools();if(toolOut.done<toolOut.total)setTimeout(step,0)};
   setTimeout(step,30)}
