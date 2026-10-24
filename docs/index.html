@@ -799,8 +799,8 @@ function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o=
   <div id="cmp">${cmpHtml()}</div></div>`}
 function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
   const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
-  // 表示の絞り込み（バンド・タイプ）。計算はやり直さない
-  const F=cmpFilter(),bandOf=r=>r.band||'その他',all=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1));
+  // 表示の絞り込み（バンド・タイプ）。計算はやり直さない。並びは同じ値なら、1回あたり→1分あたり（時間効率）の高い順
+  const F=cmpFilter(),bandOf=r=>r.band||'その他',all=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1)||(key==='val'&&perMin(T.obj)?(b.pm??-1)-(a.pm??-1):(b.val??-1)-(a.val??-1)));
   const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type)));
   const grp=(k,label,items,typed)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" data-cmpf="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" data-cmpf="${k}" data-v="">解除</button>`:''}</div>`;
   const bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
