@@ -62,6 +62,8 @@ td input.w-l{width:150px}
 .banner{background:var(--soft);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.kpi.wide{grid-column:span 2}
+@media (max-width:420px){.kpi.wide{grid-column:auto}}
 .kpi .k{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em}
 .kpi .v{font-family:var(--f-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
 .kpi .v.r{font-family:var(--f-display);font-weight:700;color:var(--accent)}
@@ -560,7 +562,7 @@ function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
 }
 // 編成表（レア・キャラ・バンド・カード名・タイプ・スナップ）
-function teamTable(rows){return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th></tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td></tr>`).join('')}</tbody></table></div><p class="note">★＝リーダー</p>`}
+function teamTable(rows){const ord=rows.some(r=>r.ord);return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div><p class="note">★＝リーダー${ord?'。発動順はライブごとにランダムで、表の順になると最高スコアです':''}</p>`}
 const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,name:x.m.name,type:x.m.type,snap:x.s.none?'':x.s.name,snapType:x.s.type});
 function chip(t){return t?`<span class="chip t-${esc(t)}">${esc(t)}</span>`:''}
 function opts(list,val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+list.map(x=>{const[v,l]=Array.isArray(x)?x:[x,x];return`<option value="${esc(v)}"${String(v)===String(val)?' selected':''}>${esc(l)}</option>`}).join('')}
@@ -575,7 +577,7 @@ function guidePanel(){
     <ol class="steps">
       ${st(nm>=5&&ns>=5,`<b>手持ちを登録する</b>：「メンバー」「スナップ」タブで、持っているカードの「所持」にチェックを入れ、Lv・特訓・覚醒などをゲームの詳細画面に合わせます。数値は自動で計算されます。`)}
       ${st(set,PUBLIC?`<b>プレイヤー情報を入れる</b>（任意）：「データ」タブから、キャラクターランク・バンドアイテム・T.G.W CARD の値を書いたJSONを読み込むと総合力が正確になります。`:`<b>プレイヤー情報を入れる</b>（任意）：「設定・データ」タブで、キャラクターランク・バンドアイテム・T.G.W CARD の値を入れると総合力が正確になります。`)}
-      ${st(false,`<b>目的と曲を選んで計算する</b>：この画面で目的（スコア最大・イベントpt最大など）と曲を選び、「最適編成を計算」を押します。`)}
+      ${st(false,`<b>目的と曲を選んで計算する</b>：この画面で目的（イベントpt最大・最高スコアなど）と曲を選び、「最適編成を計算」を押します。`)}
     </ol>
     <div class="row">${nm?'':`<button class="btn small primary" data-act="goMembers">メンバーを登録する</button>`}${PUBLIC?'':'<button class="btn small" data-act="useAuthor">作者の手持ちで試す</button>'}</div>
   </details>`}
@@ -604,10 +606,11 @@ function viewOpt(){
 // スキル発動順120通りの厳密値（曲の重み表がある場合）: 最低〜最高、推定ランクと次のランクに届く順番の数、最高になる発動順
 function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id===R.songId)||curSong(),O=e.ord,n=O.length;
   const reach=r=>{const th=song.thr?.[RANKS[r]];return th>0?O.filter(o=>o.s>=th).length:null};
-  const rr=[P.rank,P.rank+1].filter(r=>r>0&&r<RANKS.length).map(r=>[r,reach(r)]).filter(([,c])=>c!=null);
-  const best=O[n-1].p.map(i=>e.slots[i].m.chara).join('→');
-  return`<div class="kpi"><div class="k">発動順120通り（最低〜最高）</div><div class="v" style="font-size:18px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div><div class="mono muted" style="font-size:12px">最高の発動順 ${esc(best)}</div></div>
-      ${rr.length?`<div class="kpi"><div class="k">ランク到達率（120通り中）</div><div class="v" style="font-size:18px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div><div class="mono muted" style="font-size:12px">${rr.map(([r,c])=>`${RANKS[r]} ${c}/${n}通り`).join('／')}（AP・幅なし）</div></div>`:''}`}
+  const rr=[P.rank,P.rank+1].filter(r=>r>0&&r<RANKS.length).map(r=>[r,reach(r)]).filter(([r,c])=>c!=null&&(c>0||r===P.rank));
+  return`<div class="kpi wide"><div class="k">発動順120通りの最低〜最高</div><div class="v" style="font-size:17px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div></div>
+      ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
+// 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
+function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
 // 数値ブロック（最適・次善で同じレイアウト）
 function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   return`<div class="kpis">
@@ -621,8 +624,8 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
       <div class="kpi"><div class="k">アイテム / 回</div><div class="v">${fmt(vals[1])}</div></div>
       <div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>
       ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
-        return`<div class="kpi"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
-        <div class="kpi" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
+        return`<div class="kpi wide"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
+        <div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
       :`<div class="kpi"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`}
     </div>`}
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
@@ -640,7 +643,7 @@ function renderResult(){
   const e=ev({...P.t,detail:true});const objLabel=OBJECTIVES.find(o=>o.id===R.obj)?.label||'';
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
-  const slots=teamTable(e.slots.map((x,i)=>slotRow(x,i===P.t.L)));
+  const bp=bestOrderPos(e),slots=teamTable(e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})));
   const fr=R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">余裕込みの必要スコア</th><th class="num">発動順の最低〜最高</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
     ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${p.e.ord?`${fmt(p.e.ord[0].s)} 〜 ${fmt(p.e.ord[p.e.ord.length-1].s)}`:'—'}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
     </tbody></table></div></details>`:'';
