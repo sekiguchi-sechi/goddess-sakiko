@@ -744,7 +744,7 @@ function retryRules(O,T,L,nm){const C=[];
   const stat=R=>{const f=stop(R),S=O.filter(o=>!f(o.p));return{n:S.length,hit:S.filter(o=>o.s>=T).length,min:S[0]?.s,max:S[S.length-1]?.s}};
   let cur=[],t0=retryTime(O,T,L,()=>0),tc=t0;const out=[];
   for(let n=0;n<4;n++){let best=null;for(const c of C){const t=retryTime(O,T,L,stop([...cur,...c.r]));if(!best||t<best.t-1e-9)best={c,t}}
-    if(!best||best.t>tc-0.1)break;cur=[...cur,...best.c.r];tc=best.t;out.push({t:best.c.t,time:tc,...stat(cur)})}
+    if(!best||best.t>tc-0.1)break;cur=[...cur,...best.c.r];tc=best.t;out.push({t:best.c.t,r:best.c.r,time:tc,...stat(cur)})}
   // 完走すれば必ず目標に届くところまでルールを足す。1つずつ選ぶと届く並びを捨てすぎるので、最大4つの組み合わせを探す
   // （各段で有望な40通りを残す）。届かない並びが0になる組み合わせのうち、届く並びが一番多く残るもの、同じなら目標までが速いもの
   if(stat(cur).hit<stat(cur).n){const key=q=>(q.n-q.hit)*1000-q.hit;let beam=[{R:cur,add:[],q:stat(cur)}],found=null;
@@ -756,7 +756,12 @@ function retryRules(O,T,L,nm){const C=[];
       // 次の段へ: 届かない並びが少ないもの20通り＋届く並びが多いもの20通り
       const A=next.filter(b=>b.q.hit<b.q.n).sort((a,b)=>key(a.q)-key(b.q)).slice(0,20),B=next.filter(b=>b.q.hit<b.q.n).sort((a,b)=>b.q.hit-a.q.hit||(a.q.n-a.q.hit)-(b.q.n-b.q.hit)).slice(0,20);
       beam=[...new Set([...A,...B])]}
-    if(found){let R=cur;for(const c of found.add){R=[...R,...c.r];out.push({t:c.t,time:retryTime(O,T,L,stop(R)),...stat(R),sure:true})}}}
+    if(found){let R=cur;for(const c of found.add){R=[...R,...c.r];out.push({t:c.t,r:c.r,time:retryTime(O,T,L,stop(R)),...stat(R),sure:true})}}}
+  // 同じ番目のルールが2回出たら、その番目の最終的な条件に書き直す（前のルールと合わせた意味。どれを置き換えたかも書く）
+  const allow=[0,1,2,3,4].map(()=>new Set([0,1,2,3,4])),last={};
+  out.forEach((o,idx)=>{const k=o.r[0][1];for(const [i] of o.r)allow[k].delete(i);const A=[...allow[k]],B=[0,1,2,3,4].filter(i=>!allow[k].has(i));
+    if(k in last){o.t=(A.length<=2?`${k+1}番目：${A.map(i=>nm[i]).join('・')}なら続行（ほかはリトライ）`:`${k+1}番目：${B.map(i=>nm[i]).join('・')}ならリトライ`)+`　※${last[k]+1}のルールを置き換え`}
+    last[k]=idx});
   return{none:t0,noneStat:stat([]),rules:out}}
 // リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
 // 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
