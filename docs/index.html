@@ -739,10 +739,12 @@ function retryRules(O,T,L,nm){const C=[];
     for(let a=0;a<5;a++){C.push({t:`${k+1}番目は${nm[a]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a).map(i=>[i,k])});
       for(let b=a+1;b<5;b++)C.push({t:`${k+1}番目は${nm[a]}か${nm[b]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a&&i!==b).map(i=>[i,k])})}}
   const stop=R=>p=>{for(let j=0;j<5;j++)if(R.some(([i,k])=>k===j&&p[j]===i))return j+1;return 0};
+  // ルールを満たして最後まで遊んだ並びの、スコアの最低・最高と目標に届く数
+  const stat=R=>{const f=stop(R),S=O.filter(o=>!f(o.p));return{n:S.length,hit:S.filter(o=>o.s>=T).length,min:S[0]?.s,max:S[S.length-1]?.s}};
   let cur=[],t0=retryTime(O,T,L,()=>0),tc=t0;const out=[];
   for(let n=0;n<4;n++){let best=null;for(const c of C){const t=retryTime(O,T,L,stop([...cur,...c.r]));if(!best||t<best.t-1e-9)best={c,t}}
-    if(!best||best.t>tc-0.1)break;cur=[...cur,...best.c.r];tc=best.t;out.push({t:best.c.t,min:tc})}
-  return{none:t0,rules:out}}
+    if(!best||best.t>tc-0.1)break;cur=[...cur,...best.c.r];tc=best.t;out.push({t:best.c.t,time:tc,...stat(cur)})}
+  return{none:t0,noneStat:stat([]),rules:out}}
 // リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
 // 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
 function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.map(x=>x.m.chara),O=e.ord,N=O.length,L=Math.max(30,song?.len||120);
@@ -761,8 +763,11 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
     <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
     <h3 style="margin:10px 0 4px">覚えるルール</h3>
-    ${RR.rules.length?`<ol class="rt-rules">${RR.rules.map(r=>`<li><b>${esc(r.t)}</b> <span class="muted">→ 目標まで平均 ${m(r.min)}</span></li>`).join('')}</ol>`:'<p class="muted" style="margin:0">リトライしても早くならないので、毎回最後まで遊ぶのがいちばんです。</p>'}
-    <p class="note" style="margin:4px 0 0">リトライなし（毎回最後まで）だと平均 ${m(RR.none)}、下の分かれ道をすべて使うと ${m(tTree)}。時間は「スキルが曲の中で均等な間隔で発動し、リトライ1回に${RETRY_SEC}秒」と仮定した目安です。</p>
+    ${RR.rules.length?`<div class="tbl"><table><thead><tr><th>#</th><th>ルール（上のルールに足していく）</th><th class="num">完走したときのスコア（最低〜最高）</th><th class="num">目標に届く</th><th class="num">目標まで平均</th></tr></thead><tbody>
+      <tr><td></td><td class="muted">ルールなし（毎回最後まで）</td><td class="num">${fmt(RR.noneStat.min)}〜${fmt(RR.noneStat.max)}</td><td class="num">${RR.noneStat.hit}/${RR.noneStat.n}（${Math.round(RR.noneStat.hit/RR.noneStat.n*100)}%）</td><td class="num">${m(RR.none)}</td></tr>
+      ${RR.rules.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.t)}</b></td><td class="num">${r.min<T?`<span style="color:var(--muted)">${fmt(r.min)}</span>`:fmt(r.min)}〜${fmt(r.max)}</td><td class="num">${r.hit}/${r.n}（${Math.round(r.hit/r.n*100)}%）</td><td class="num">${m(r.time)}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">リトライしても早くならないので、毎回最後まで遊ぶのがいちばんです。</p>'}
+    <p class="note" style="margin:4px 0 0">「完走したときのスコア」は、その行までのルールをすべて満たして最後まで遊んだときに出るスコアの幅（オールパーフェクト前提）。最低が目標より低い行では、ルールを満たしても届かない並びが残ります。下の分かれ道をすべて使うと平均 ${m(tTree)}。時間は「スキルが曲の中で均等な間隔で発動し、リトライ1回に${RETRY_SEC}秒」と仮定した目安です。</p>
     <details style="margin-top:8px"><summary class="muted">すべての分かれ道を見る</summary><ul class="rt-tree" style="margin-top:6px">${node([],O,0)}</ul>
     <p class="note" style="margin:6px 0 0">「続行」の％は、そこまでの発動順のまま最後までいったときに目標に届く確率。「リトライ」の人がその番目で発動したら、もう目標には届きません。100%になった分かれ道は、あとは誰が来ても届きます。</p></details></details>`}
 // 番目ごとの重みと、メンバー×番目の増えるスコア。スコア＝総合力×(基礎＋Σ スキル%×重み(番目, スキルの長さ))（haneoka の重み表）
