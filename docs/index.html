@@ -718,6 +718,32 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
   const rr=[P.rank,P.rank+1].filter(r=>r>0&&r<RANKS.length).map(r=>[r,reach(r)]).filter(([r,c])=>c!=null&&(c>0||r===P.rank));
   return`<div class="kpi wide"><div class="k">発動順120通りの最低〜最高</div><div class="v" style="font-size:17px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div></div>
       ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
+// 発動順で狙う順番: 120通りの中から、条件を1つずつ足していく。各段で「平均スコアの伸び ÷ 当たりにくさ（何回に1回になるか、log2）」が
+// いちばん大きい条件を選ぶ（何度もやり直さずに済む条件から順に並ぶ）。条件は「Xを k番目」「Xを k番目以外」「Xを k番目か l番目」「XとYを k・l番目（順不同）」
+function orderPlan(e){if(!e.ord||e.ord.length<2)return null;const nm=e.slots.map(x=>x.m.chara),C=[];
+  const subs=[];for(let b=1;b<31;b++)subs.push([0,1,2,3,4].filter(x=>b>>x&1));
+  const jn=(a,f)=>a.map(f).join('か');
+  // 「k番目は（X か Y …）」と「X は（k番目か l番目 …）」。1〜4個の組み合わせすべて（5個は条件にならない）
+  for(const S of subs){if(S.length>4)continue;
+    const out=[0,1,2,3,4].find(x=>!S.includes(x));
+    for(let k=0;k<5;k++)C.push({f:p=>S.includes(p[k]),t:S.length===4?`${k+1}番目を${nm[out]}以外に`:`${k+1}番目を${jn(S,i=>nm[i])}に`});
+    for(let i=0;i<5;i++)C.push({f:p=>S.some(k=>p[k]===i),t:S.length===4?`${nm[i]}を${out+1}番目以外に`:`${nm[i]}を${jn(S,k=>`${k+1}番目`)}に`})}
+  // 2人を2つの枠に（順不同）
+  for(let i=0;i<5;i++)for(let j=i+1;j<5;j++)for(let k=0;k<5;k++)for(let l=k+1;l<5;l++)
+    C.push({f:p=>(p[k]===i&&p[l]===j)||(p[k]===j&&p[l]===i),t:`${nm[i]}と${nm[j]}を${k+1}番目と${l+1}番目に（順不同）`});
+  const avg=a=>a.reduce((s,o)=>s+o.s,0)/a.length,all=e.ord,base=avg(all),steps=[];let cur=all;
+  for(let n=0;n<6&&cur.length>1;n++){let best=null;const m0=avg(cur);
+    for(const c of C){const S=cur.filter(o=>c.f(o.p));if(!S.length||S.length===cur.length)continue;const g=avg(S)-m0;if(g<=0)continue;
+      const v=g/Math.log2(cur.length/S.length);if(!best||v>best.v+1e-9||(Math.abs(v-best.v)<=1e-9&&S.length>best.S.length))best={c,S,v,g}}
+    if(!best||best.g<base*0.0003)break;cur=best.S;steps.push({t:best.c.t,n:cur.length,avg:avg(cur),max:cur[cur.length-1].s,min:cur[0].s})}
+  return steps.length?{base,total:all.length,max:all[all.length-1].s,steps}:null}
+function orderPlanHtml(e){const P=orderPlan(e);if(!P)return'';const pct=v=>`${v>=P.base?'+':''}${((v/P.base-1)*100).toFixed(2)}%`;
+  return`<details class="panel" data-ordplan${state.ui.ordPlanOpen===false?'':' open'}><summary><b>発動順で狙う順番</b> <span class="muted">（上から順に、少ないやり直しで伸びる条件）</span></summary>
+    <div class="tbl" style="margin-top:8px"><table><thead><tr><th>#</th><th>条件（上の条件に足していく）</th><th class="num">当たる並び（確率）</th><th class="num">平均スコア</th><th class="num">最低〜最高</th></tr></thead><tbody>
+    <tr><td></td><td class="muted">条件なし（ランダム）</td><td class="num">${P.total}通り</td><td class="num">${fmt(P.base)}</td><td class="num">${fmt(e.ord[0].s)}〜${fmt(P.max)}</td></tr>
+    ${P.steps.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.t)}</td><td class="num">${s.n}通り <span class="muted">(${Math.round(s.n/P.total*100)}%)</span></td><td class="num"><b>${fmt(s.avg)}</b> <span class="muted">${pct(s.avg)}</span></td><td class="num">${fmt(s.min)}〜${fmt(s.max)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="note" style="margin:6px 0 0">発動順はライブごとにランダムです。1行目だけそろえば十分伸びる場合が多く、下の行ほど当たりにくくなります。全部そろえた最高は編成表の「最高の発動順」の列です。</p></details>`}
 // 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
 function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
 // 数値ブロック
@@ -773,7 +799,7 @@ function renderResult(){
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${chalHtml}${fr}</div>`;
+  </div>${R.obj!=='gkscore'?orderPlanHtml(e):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
@@ -1187,6 +1213,7 @@ document.addEventListener('change',e=>{
 document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   if(d.matches('details[data-kpi]')){state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open})}
   else if(d.matches('details[data-fr]'))state.ui.frOpen=d.open;
+  else if(d.matches('details[data-ordplan]'))state.ui.ordPlanOpen=d.open;
   else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
   else return;
   save()},true);
