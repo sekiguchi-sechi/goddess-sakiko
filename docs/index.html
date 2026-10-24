@@ -553,7 +553,7 @@ function solve(song,obj){
 }
 
 // ===== 描画 =====
-const TABS=PUBLIC?[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
+const TABS=PUBLIC?[['opt','最適化'],['compare','全曲比較'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['compare','全曲比較'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
 let lastResult=null,shownIdx=null;
 function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
@@ -667,10 +667,10 @@ function renderResult(){
     ${teamTable(e2.slots.map((x,i)=>slotRow(x,i===a.t.L)))}</div>`})():''}${chalHtml}${fr}</div>`;
 }
 
-// ===== 追加ツール（最適化の結果の下）: 楽曲比較・周回効率／育成の優先度 =====
+// ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
 // どちらも「今の目的・手持ち・イベント」で最適化を何度も回す。画面が固まらないよう1件ずつ setTimeout で進め、
 // 探索は軽め（試行回数を減らす）にする。別のツールや最適化を始めたら古い実行は止まる（toolRun の世代で判定）
-let toolRun=0,toolOut=null;
+let toolRun=0,toolOut=null,cmpOut=null;
 const TOOL_FAST={restarts:16,minRestarts:8,stopHits:4};
 const PLAY_OVERHEAD=40; // 1回あたりの曲以外の時間（選曲・ロード・リザルト）の目安・秒
 function withFast(fn){const st=state.settings,keep={};for(const k in TOOL_FAST){keep[k]=st[k];st[k]=TOOL_FAST[k]}
@@ -680,37 +680,49 @@ const perMin=o=>o==='ptTotal'||o==='itemTotal';
 const valCol=o=>o!=='score'&&o!=='chscore'&&o!=='gkscore'; // 目的の値が推定スコアそのものなら列を重ねない
 function toolsHtml(){
   const busy=toolOut&&toolOut.done<toolOut.total;
-  const head=`<div class="row"><button class="btn small" data-act="cmpSongs"${busy?' disabled':''}>全曲で比べる（周回効率）</button>
-    <button class="btn small" data-act="growth"${busy?' disabled':''}>育成の優先度を調べる</button>
-    <span class="muted" style="font-size:12px">今の目的・手持ち・イベントで計算します（探索は軽めのため、1曲の最適化より少し低く出ることがあります）</span></div>`;
+  const head=`<div class="row"><button class="btn small" data-act="growth"${busy?' disabled':''}>育成の優先度を調べる</button>
+    <span class="muted" style="font-size:12px">今の目的・曲・手持ちで、どのカードを育てると伸びるかを調べます。全曲の比較は「全曲比較」タブへ</span></div>`;
   if(!toolOut)return`<section class="panel stack">${head}</section>`;
   const T=toolOut,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
-  if(T.kind==='songs'){
-    const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
-    const rows=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1));
-    return`<section class="panel stack">${head}<h3 style="margin:0">楽曲比較：${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
-      ${perMin(T.obj)?`<div class="row"><span class="muted">並べ替え</span><button class="fchip${key==='val'?' on':''}" data-act="cmpSortVal">1回あたり</button><button class="fchip${key==='pm'?' on':''}" data-act="cmpSortMin">1分あたり</button><span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span></div>`:''}
-      <div class="tbl"><table><thead><tr><th>#</th><th>曲</th><th>推定ランク</th><th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
-      ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${r.err?`<td colspan="${3+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`<td><b>${RANKS[r.rank]}</b></td><td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
-      </tbody></table></div></section>`}
   const rows=T.rows.filter(r=>r.gain>0).sort((a,b)=>b.gain-a.gain);
   return`<section class="panel stack">${head}<h3 style="margin:0">育成の優先度：${esc(T.song)}／${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
     <p class="note">1か所だけ育てたときに、${objUnit(T.obj)}${valCol(T.obj)?'（同じなら推定スコア）':''}がどれだけ伸びるか。基準 ${fmt(T.base)}。素材の量は考えていません。対象は今の最適編成のカードと、入りそうな上位のカードです。</p>
     ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>育成</th><th class="num">${objUnit(T.obj)}の増分</th>${valCol(T.obj)?'<th class="num">推定スコアの増分</th>':''}</tr></thead><tbody>
     ${rows.slice(0,25).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.card)}</td><td>${esc(r.up)}</td><td class="num"><b>+${fmt(r.gainVal)}</b>${T.base?` <span class="muted">(+${(r.gainVal/T.base*100).toFixed(1)}%)</span>`:''}</td>${valCol(T.obj)?`<td class="num">${r.gainScore>=0?'+':''}${fmt(r.gainScore)}</td>`:''}</tr>`).join('')}
     </tbody></table></div>`:(busy?'':`<p class="muted">1か所の育成で伸びる候補は見つかりませんでした。${valCol(T.obj)?'すでに推定ランクと最大ボーナスに届いていて、1か所の育成では値が変わらない状態です。':''}</p>`)}</section>`}
+// 全曲比較タブ: 目的を選んで全曲を最適化し、1回あたり・1分あたりで並べる
+function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o==='ptTotal'||o==='itemTotal',busy=cmpOut&&cmpOut.done<cmpOut.total;
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">全曲比較（周回効率）</h2>
+    <div class="row">
+      <label class="f">目的<select id="cmpObj">${opts(OBJECTIVES.map(x=>[x.id,x.label]),o)}</select></label>
+      ${useCh?`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||state.songs[0])?.name||''))}</label>`:''}
+      <label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>
+      <label class="f">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
+      <button class="btn primary" data-act="cmpSongs"${busy?' disabled':''}>全曲を計算</button>
+    </div>
+    <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます（探索は軽めのため、1曲ずつの最適化より少し低く出ることがあります）。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
+  <div id="cmp">${cmpHtml()}</div></div>`}
+function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
+  const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
+  const rows=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1));
+  return`<section class="panel stack"><h3 style="margin:0">${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
+    ${perMin(T.obj)?`<div class="row"><span class="muted">並べ替え</span><button class="fchip${key==='val'?' on':''}" data-act="cmpSortVal">1回あたり</button><button class="fchip${key==='pm'?' on':''}" data-act="cmpSortMin">1分あたり</button><span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span></div>`:''}
+    <div class="tbl"><table><thead><tr><th>#</th><th>曲</th><th>推定ランク</th><th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${r.err?`<td colspan="${3+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`<td><b>${RANKS[r.rank]}</b></td><td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
+    </tbody></table></div></section>`}
+function paintCmp(){const el=document.getElementById('cmp');if(el)el.innerHTML=cmpHtml();const b=document.querySelector('[data-act="cmpSongs"]');if(b)b.disabled=!!(cmpOut&&cmpOut.done<cmpOut.total)}
 function paintTools(){const el=document.getElementById('tools');if(el)el.innerHTML=toolsHtml()}
 // 楽曲比較: 全曲を順に最適化
 function startCompare(){
-  const id=++toolRun,obj=state.ui.obj;
+  const id=++toolRun,obj=state.ui.cmpObj||state.ui.obj||'ptTotal';
   // チャレンジのスコアは課題楽曲（chSong）で計算されるので、曲ごとに課題楽曲を差し替えて比べる。対象はイベントの課題曲（無ければ全曲）
   const chNames=state.event?.chSongs||[];
   const list=state.songs.filter(s=>obj==='gkscore'?s.gkTypes?.length:obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
-  toolOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintTools();
-  const step=()=>{if(id!==toolRun)return;const s=list[toolOut.done];
+  cmpOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintCmp();
+  const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
     let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=withFast(()=>solve(s,obj))}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
-    const b=r.best;toolOut.rows.push(b?{id:s.id,name:s.name,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
-    toolOut.done++;if(toolOut.done>=toolOut.total)CHAL_CACHE=null;paintTools();if(toolOut.done<toolOut.total)setTimeout(step,0)};
+    const b=r.best;cmpOut.rows.push(b?{id:s.id,name:s.name,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
+    cmpOut.done++;if(cmpOut.done>=cmpOut.total)CHAL_CACHE=null;paintCmp();if(cmpOut.done<cmpOut.total)setTimeout(step,0)};
   setTimeout(step,30)}
 // 育成の優先度: 候補カードを1段階ずつ育てた仮の手持ちで最適化し、目的の値の伸びを比べる
 function growthCandidates(base){
@@ -967,7 +979,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
 
 function render(){
   renderTabs();
-  const v={opt:viewOpt,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
+  const v={opt:viewOpt,compare:viewCompare,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
 }
 
@@ -1009,9 +1021,9 @@ document.addEventListener('click',e=>{
     case'importFile':document.getElementById('importFile')?.click();return;
     case'cmpSongs':startCompare();return;
     case'growth':startGrowth();return;
-    case'cmpSortVal':state.ui.cmpSort='val';save();paintTools();return;
-    case'cmpSortMin':state.ui.cmpSort='min';save();paintTools();return;
-    case'cmpPick':{const sid=e.target.closest('[data-song]')?.dataset.song;if(sid){state.ui.song=sid;save();render();runOpt()}return}
+    case'cmpSortVal':state.ui.cmpSort='val';save();paintCmp();return;
+    case'cmpSortMin':state.ui.cmpSort='min';save();paintCmp();return;
+    case'cmpPick':{const sid=e.target.closest('[data-song]')?.dataset.song;if(sid){const o=cmpOut?.obj||state.ui.obj;if(o==='chscore')state.ui.chSong=sid;state.ui.song=sid;state.ui.obj=o;state.ui.tab='opt';save();render();runOpt()}return}
 
     case'addSong':{const s={id:uid(),name:'新しい曲',type:'all',len:120,K:4.5,thr:{}};state.songs.push(s);break}
     case'loadEvent':{const id=document.getElementById('evPreset').value;state.event=myEvent(id);pickChSong(state.event);lastResult=null;break}
@@ -1027,6 +1039,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.id==='obj'){state.ui.obj=el.value;save();render();return}
+  if(el.id==='cmpObj'){state.ui.cmpObj=el.value;save();render();return}
   if(el.id==='songSel'||el.id==='chSongSel')return;
   if(el.id==='lb'){state.settings.lb=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
   if(el.id==='chMult'){state.settings.chMult=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
@@ -1060,7 +1073,7 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
   else return;
   save()},true);
-function runOpt(){toolRun++;CHAL_CACHE=null;if(toolOut&&toolOut.done<toolOut.total)toolOut=null;
+function runOpt(){toolRun++;CHAL_CACHE=null;if(toolOut&&toolOut.done<toolOut.total)toolOut=null;if(cmpOut&&cmpOut.done<cmpOut.total)cmpOut=null;
   const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}
   setTimeout(()=>{
     const song=curSong();
