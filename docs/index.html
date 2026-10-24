@@ -731,14 +731,14 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
       ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
 // リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
 // 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
-// 覚えるルール: 「k番目が○○ならリトライ」「k番目は○○か○○以外ならリトライ」などを、目標に届くまでの平均時間が一番縮むものから
+// 覚えるルール: 「k番目：○○ならリトライ」「k番目：○○・○○なら続行（ほかはリトライ）」などを、目標に届くまでの平均時間が一番縮むものから
 // 1つずつ足す（最大4つ、ほとんど縮まなくなったら打ち切り）。時間はスキルが曲の中で均等に発動し、リトライ1回に15秒かかると仮定
 const RETRY_SEC=15;
 function retryTime(O,T,L,stopAt){let cost=0,succ=0;for(const o of O){const k=stopAt(o.p);if(k&&k<=4)cost+=L*k/6+RETRY_SEC;else{cost+=L+RETRY_SEC;if(o.s>=T)succ++}}return succ?cost/succ/60:Infinity}
 function retryRules(O,T,L,nm){const C=[];
-  for(let k=0;k<4;k++){for(let i=0;i<5;i++)C.push({t:`${k+1}番目が${nm[i]}ならリトライ`,r:[[i,k]]});
-    for(let a=0;a<5;a++){C.push({t:`${k+1}番目は${nm[a]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a).map(i=>[i,k])});
-      for(let b=a+1;b<5;b++)C.push({t:`${k+1}番目は${nm[a]}か${nm[b]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a&&i!==b).map(i=>[i,k])})}}
+  for(let k=0;k<4;k++){for(let i=0;i<5;i++)C.push({t:`${k+1}番目：${nm[i]}ならリトライ`,r:[[i,k]]});
+    for(let a=0;a<5;a++){C.push({t:`${k+1}番目：${nm[a]}なら続行（ほかはリトライ）`,r:[0,1,2,3,4].filter(i=>i!==a).map(i=>[i,k])});
+      for(let b=a+1;b<5;b++)C.push({t:`${k+1}番目：${nm[a]}・${nm[b]}なら続行（ほかはリトライ）`,r:[0,1,2,3,4].filter(i=>i!==a&&i!==b).map(i=>[i,k])})}}
   const stop=R=>p=>{for(let j=0;j<5;j++)if(R.some(([i,k])=>k===j&&p[j]===i))return j+1;return 0};
   // ルールを満たして最後まで遊んだ並びの、スコアの最低・最高と目標に届く数
   const stat=R=>{const f=stop(R),S=O.filter(o=>!f(o.p));return{n:S.length,hit:S.filter(o=>o.s>=T).length,min:S[0]?.s,max:S[S.length-1]?.s}};
