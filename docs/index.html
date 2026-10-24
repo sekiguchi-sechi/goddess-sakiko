@@ -370,13 +370,13 @@ function prep(song,ch,gkMode){
   CTX={gk,gkCnt,gkQ:(st.gkQ??162)/100,gkEff:st.gkEff||{COMBO:17,JUST:17,LUCK:11},gkBase:st.gkBase||{COMBO:0,JUST:32,LUCK:0},TL,VIP,SE:st.skillEff??0.5,K:song.K||1,T:Math.max(1,song.len||120),song,ch:!!ch,sb:song.sb,sw:song.sw,rt:song.rt?{b:song.rt.b}:null,AW,kf:song.kf||st.scoreAdj||1};
 }
 // 総合力はゲームの「総合力詳細」と同じ計算: メンバーごと・パラメータ（Pfm/Tec/Vis）ごとに各ボーナスを掛けて切り捨て、足し合わせる。
-// スナップ補正はスナップのパラメータ別%、リーダースキルは対象パラメータだけ（同じパラメータへの%は合計してから切り捨て）。
+// スナップ補正はスナップのパラメータ別%（チャレンジのスナップのイベントパラメータ%は足してから掛けて1回だけ切り捨て、2026-10-25 微笑みの爆弾で確認）、リーダースキルは対象パラメータだけ（同じパラメータへの%は合計してから切り捨て）。
 // 2026-10-25 実機の内訳（革命道中・祥子リーダー）と各項目0〜1の差で一致
 const flr=x=>Math.floor(x+1e-7),PTV=['P','T','V'];
 const leadHit=(l,m)=>l.k==='all'||(l.k==='type'&&m.type===l.v)||(l.k==='band'&&m.band===l.v)||(l.k==='chara'&&m.chara===l.v)||(l.k==='bandtype'&&m.band===l.v&&m.type===l.v2)||(l.k==='skill'&&m.liveKind===l.v)||(l.k==='geki'&&m.gekiKind===l.v);
 // メンバー×スナップで決まる分（リーダースキル以外）
 function pairPow(m,s){const {VIP}=CTX,tl=(s.type&&s.type===m.type?(s.tl||0):0);let p=0;
-  for(let k=0;k<3;k++){const a=m.par[k],sc=s.cv?s.cv[PTV[k]]:s.c;p+=a+flr(a*VIP)+flr(a*sc)+flr(a*s.evp)+flr(a*m.bandItem)+flr(a*tl)+flr(a*m.smT)+flr(a*m.smG)}return p}
+  for(let k=0;k<3;k++){const a=m.par[k],sc=s.cv?s.cv[PTV[k]]:s.c;p+=a+flr(a*VIP)+flr(a*(sc+s.evp))+flr(a*m.bandItem)+flr(a*tl)+flr(a*m.smT)+flr(a*m.smG)}return p}
 // リーダー L のリーダースキルがメンバー m に足す分
 function leadPow(L,m){let p=0;for(let k=0;k<3;k++){let q=0;for(const l of L.lead)if((l.s==='all'||l.s===PTV[k])&&leadHit(l,m))q+=l.p;if(q)p+=flr(m.par[k]*q)}return p}
 function ev(t){
