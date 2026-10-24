@@ -433,9 +433,64 @@ function ev(t){
   const ord=A&&t.detail?orders120(A,P*CTX.kf,CTX.rt.b):null;
   return{P,Sk,GB,free,gkMul,gkW,gkLose:free*gkLoseMul,score:free*gkMul,sd,lo:(free-z*sd)*gkMul,hi:(free+z*sd)*gkMul,max:mx||free,ord,pt,it,slots};
 }
+// ===== 探索用の速い評価（evq）=====
+// ev と同じ式・同じ足し算の順で計算するが、メンバー×スナップの組ごとに変わらない値を prep 後に1回だけ作っておく。
+// 探索（localSearch・polish2・optimizeF）は1曲あたり数十万回評価するのでここが大半の時間。表示用の detail は ev を使う
+// tests/golden.js の evq_equal で、ランダムな編成について ev と完全に同じ値になることを確かめている
+function buildFast(){const nM=M.length,nS=S.length,{VIP,T,SE,gk}=CTX,N=nM*nS;
+  const base=new Float64Array(N),sk=new Float64Array(N),y=new Float64Array(N),pt=new Float64Array(N),it=new Float64Array(N),nj=new Float64Array(N),LP=new Float64Array(nM*nM);
+  const G=gk?CTX.song.gk2:null,sv=G?new Array(N):null,mv=G?M.map(m=>m.gs!=null?[G.v[m.gs+'|'],m.gl?m.gl-1:(m.awak|0)]:null):null;
+  for(let a=0;a<nM;a++){const m=M[a];for(let b=0;b<nS;b++){const s=S[b],j=a*nS+b;
+    const sc=s.cv?s.cv.P*m.share.P+s.cv.T*m.share.T+s.cv.V*m.share.V:s.c;
+    base[j]=1+VIP+sc+s.evp+m.bandItem+(s.type&&s.type===m.type?(s.tl||0):0)+m.smatch;
+    const ext=(s.band&&s.band===m.band)?(s.extB!=null&&s.extB!==''?+s.extB:s.ext*2):s.ext;
+    sk[j]=SE*m.sk*Math.min(m.sec+ext,T)/T;y[j]=m.sk*(m.sec+ext)/5;pt[j]=m.ev.pt+s.ev.pt;it[j]=m.ev.item+s.ev.item;
+    if(s.gkJudgeAll)nj[j]=(s.band&&s.band===m.band)?1:0.5;
+    if(G&&s.gs!=null){const k1=s.gs+'|'+((s.band&&s.band===m.band)?1:0);sv[j]=[G.v[G.v[k1]?k1:s.gs+'|'],s.lb|0]}}
+    for(let c=0;c<nM;c++)LP[c*nM+a]=leadPct(M[c],m)}
+  let g2=null;if(G){const st=state.settings;g2={G,KK:{1:st.gk2C??1.33,2:st.gk2L??1.06,3:st.gk2J??1.01},LV:[.45,.55,.64,.73,1],a0:Math.pow(st.gk2A0??(st.gkJust??20)/100,st.gk2G??0.88),a1:st.gk2A1??0.15,JP:st.gk2JP??0.92,gkf:CTX.song.gkf||1};
+    g2.sec=G.r.map(r=>({j:r[0]===3,f1:r[3][0]/r[3][0],f2:r[3][1]/r[3][0],kk:g2.KK[r[0]]??1}))}
+  const AF=CTX.AW?new Float64Array(N*5):null;if(AF)for(let a=0;a<nM;a++)for(let b=0;b<nS;b++){const row=CTX.AW[a][b],o=(a*nS+b)*5;for(let k=0;k<5;k++)AF[o+k]=row[k]}
+  const B=Float64Array.from(M,m=>m.B);
+  return{nS,nM,B,AF,base,sk,y,pt,it,nj,LP,sv,mv,g2,z:state.settings.orderZ??1.28}}
+const EQ_Y=new Float64Array(5),EQ_J=new Int32Array(5),EQ_A=[null,null,null,null,null];
+function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return ev(t);
+  const nS=F.nS,nM=F.nM,Li=t.m[t.L],K=CTX.K,gk=CTX.gk;let P=0,Sk=0,pt=0,it=0;const ys=EQ_Y,J=EQ_J;
+  for(let i=0;i<5;i++){const a=t.m[i],j=a*nS+t.s[i];J[i]=j;
+    P+=F.B[a]*(F.base[j]+F.LP[Li*nM+a]);Sk+=F.sk[j];ys[i]=F.y[j];pt+=F.pt[j];it+=F.it[j]}
+  let free=K*P*(1+Sk);
+  if(gk){const {G,KK,LV,a0,a1,JP,gkf}=F.g2;
+    let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
+    let nj=0;for(let i=0;i<5;i++)if(S[t.s[i]].gkJudgeAll)nj+=F.nj[J[i]];
+    const al=Math.min(1,a0+a1*nj);
+    const SC=F.g2.sec,nr=SC.length,mvv=F.mv,svv=F.sv;
+    // 区間の基礎分は JUST率α（判定幅スナップの枚数で決まる）と順位だけで決まるので、αごとに1回だけ計算して使い回す
+    const bm=F.g2.bm||(F.g2.bm=new Map());
+    // sec: 区間の値（JUST区間は理論値とPERFECT値×JPをαで混ぜる）。ev の sec と同じ式
+    const add=(inc,e,q)=>{if(!e)return inc;const v=e[0];if(!v)return inc;const lv=LV[e[1]];
+      for(let x=0;x<v.length;x++){const c=SC[x],w=v[x],f=q===1?c.f1:c.f2,th=w[0]+w[1]*f;inc+=(c.j&&w.length>3?al*th+(1-al)*JP*(w[2]+w[3]*f):th)*c.kk*lv}return inc};
+    const at=q=>{let base=bm.get(q===1?al:-1-al);if(base===undefined){base=G.b;for(let i=0;i<nr;i++){const r=G.r[i],c=SC[i],f=q===1?c.f1:c.f2,th=r[1]+r[2]*f;base+=(c.j?al*th+(1-al)*JP*(r[4]+r[5]*f):th)*c.kk-(r[1]+r[2])}bm.set(q===1?al:-1-al,base)}let inc=0;
+      for(let i=0;i<5;i++){inc=add(inc,mvv[t.m[i]],q);inc=add(inc,svv[J[i]],q)}
+      return (P/300000*(base+inc)+P*yb*G.W*(base/G.b))*gkf};
+    const win=at(1),lose=at(2);
+    const mk={};for(let i=0;i<5;i++){const k=M[t.m[i]].gekiKind;if(k)mk[k]=(mk[k]||0)+1}
+    return{P,Sk,free,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,gk2:true,mk,nj}}
+  let sd=0,mx=0;
+  if(CTX.sw&&!CTX.rt){const w=CTX.sw,W=w.reduce((a,b)=>a+b,0),wb=W/5;let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
+    let vy=0;for(let i=0;i<5;i++)vy+=(ys[i]-yb)**2;vy/=4;const vw=w.reduce((a,x)=>a+(x-wb)**2,0);
+    free=P*(CTX.sb+yb*W)*CTX.kf;sd=P*Math.sqrt(vy*vw)*CTX.kf;Sk=yb*W/CTX.sb}
+  if(CTX.rt){const R=CTX.rt,AF=F.AF,A=CTX.wantMax?EQ_A:null;let tot=0,c0=0,c1=0,c2=0,c3=0,c4=0;
+    let sq=0,rq=0;for(let i=0;i<5;i++){const o=J[i]*5;if(A)A[i]=CTX.AW[t.m[i]][t.s[i]];const v0=AF[o],v1=AF[o+1],v2=AF[o+2],v3=AF[o+3],v4=AF[o+4];
+      const r=0+v0+v1+v2+v3+v4;c0+=v0;c1+=v1;c2+=v2;c3+=v3;c4+=v4;sq=sq+v0*v0+v1*v1+v2*v2+v3*v3+v4*v4;rq+=r*r;tot+=r}
+    const cq=0+c0*c0+c1*c1+c2*c2+c3*c3+c4*c4;const q=Math.max(0,sq-rq/5-cq/5+tot*tot/25);
+    free=P*(R.b+tot/5)*CTX.kf;sd=P*Math.sqrt(q/4)*CTX.kf;Sk=tot/5/R.b;
+    if(A)mx=P*(R.b+bestAssign(A,1))*CTX.kf}
+  const z=F.z;
+  return{P,Sk,free,gkLose:free,score:free,sd,lo:free-z*sd,hi:free+z*sd,max:mx||free,pt,it}}
 // 5人×5発動枠の割り当てで Σa を最大（sign=1）／最小（sign=-1）にする値。dp[集合]=先頭から|集合|枠に割り当てた最良値
-function bestAssign(A,sign){const dp=new Float64Array(32).fill(-Infinity);dp[0]=0;
-  for(let m=0;m<32;m++){if(dp[m]===-Infinity)continue;let k=0;for(let b=m;b;b&=b-1)k++;if(k>=5)continue;
+const BA_DP=new Float64Array(32),BA_PC=Uint8Array.from({length:32},(_,m)=>{let k=0;for(let b=m;b;b&=b-1)k++;return k});
+function bestAssign(A,sign){const dp=BA_DP;dp.fill(-Infinity);dp[0]=0;
+  for(let m=0;m<32;m++){if(dp[m]===-Infinity)continue;const k=BA_PC[m];if(k>=5)continue;
     for(let i=0;i<5;i++)if(!(m>>i&1)){const v=dp[m]+sign*A[i][k];if(v>dp[m|1<<i])dp[m|1<<i]=v}}
   return sign*dp[31]}
 // 表示用: 120通りすべてのスコア（昇順）。PERMS[p][k]=k番目の枠で発動するメンバー
@@ -464,8 +519,8 @@ function value(obj,e,rank){
 
 // ===== 探索（ランダム多点スタート＋局所探索） =====
 // 探索の乱数は種を固定（同じ条件なら何度押しても同じ結果になるように）
-let rnd=Math.random;
-function seedRnd(a){rnd=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rnd=Math.random,SEED0=1;
+function seedRnd(a){SEED0=a;rnd=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function randomTeam(){
   const st=state.settings,t={m:[],s:[],L:0,lm:[],ls:[]};const usedC=new Set();
   const lockedM=M.map((m,i)=>m.lock?i:-1).filter(i=>i>=0).slice(0,5);
@@ -481,21 +536,21 @@ function randomTeam(){
   return t;
 }
 function localSearch(t,f){
-  const uc=state.settings.uniqueChara;let cur=f(ev(t));
+  const uc=state.settings.uniqueChara;let cur=f(evq(t));
   for(let guard=0;guard<200;guard++){
     let best=cur,mv=null;
     const inM=new Set(t.m),inS=new Set(t.s);
     for(let i=0;i<5;i++){if(t.lm[i])continue;const old=t.m[i];
       const chars=new Set(t.m.filter((_,k)=>k!==i).map(k=>M[k].chara));
       for(let j=0;j<M.length;j++){if(inM.has(j))continue;if(uc&&chars.has(M[j].chara))continue;
-        t.m[i]=j;const v=f(ev(t));if(v>best){best=v;mv=['m',i,j]}}
+        t.m[i]=j;const v=f(evq(t));if(v>best){best=v;mv=['m',i,j]}}
       t.m[i]=old}
     for(let i=0;i<5;i++){if(t.ls[i])continue;const old=t.s[i];
-      for(let j=0;j<S.length;j++){if(inS.has(j))continue;t.s[i]=j;const v=f(ev(t));if(v>best){best=v;mv=['s',i,j]}}
+      for(let j=0;j<S.length;j++){if(inS.has(j))continue;t.s[i]=j;const v=f(evq(t));if(v>best){best=v;mv=['s',i,j]}}
       t.s[i]=old}
     for(let i=0;i<5;i++)for(let k=i+1;k<5;k++){
-      [t.s[i],t.s[k]]=[t.s[k],t.s[i]];const v=f(ev(t));if(v>best){best=v;mv=['w',i,k]}[t.s[i],t.s[k]]=[t.s[k],t.s[i]]}
-    for(let i=0;i<5;i++){if(i===t.L)continue;const o=t.L;t.L=i;const v=f(ev(t));if(v>best){best=v;mv=['L',i]}t.L=o}
+      [t.s[i],t.s[k]]=[t.s[k],t.s[i]];const v=f(evq(t));if(v>best){best=v;mv=['w',i,k]}[t.s[i],t.s[k]]=[t.s[k],t.s[i]]}
+    for(let i=0;i<5;i++){if(i===t.L)continue;const o=t.L;t.L=i;const v=f(evq(t));if(v>best){best=v;mv=['L',i]}t.L=o}
     if(!mv)break;
     if(mv[0]==='m')t.m[mv[1]]=mv[2];else if(mv[0]==='s')t.s[mv[1]]=mv[2];
     else if(mv[0]==='w'){const[i,k]=[mv[1],mv[2]];[t.s[i],t.s[k]]=[t.s[k],t.s[i]];[t.ls[i],t.ls[k]]=[t.ls[k],t.ls[i]]}
@@ -505,14 +560,14 @@ function localSearch(t,f){
   return{t,val:cur};
 }
 // 仕上げ: スナップ2枚を同時に入れ替える手も試す（1枚ずつだとランクを割るので動けない局所解の対策）
-function polish2(t,f){t=JSON.parse(JSON.stringify(t));let cur=f(ev(t));
+function polish2(t,f){t=JSON.parse(JSON.stringify(t));let cur=f(evq(t));
   for(let guard=0;guard<10;guard++){let best=cur,mv=null;const inS=new Set(t.s);
     for(let i=0;i<5;i++)for(let k=i+1;k<5;k++){if(t.ls[i]||t.ls[k])continue;const oi=t.s[i],ok=t.s[k];
       for(let j=0;j<S.length;j++){if(inS.has(j))continue;t.s[i]=j;
-        for(let l=0;l<S.length;l++){if(l===j||inS.has(l))continue;t.s[k]=l;const v=f(ev(t));if(v>best){best=v;mv=[i,j,k,l]}}
+        for(let l=0;l<S.length;l++){if(l===j||inS.has(l))continue;t.s[k]=l;const v=f(evq(t));if(v>best){best=v;mv=[i,j,k,l]}}
         t.s[k]=ok}
       t.s[i]=oi}
-    if(!mv)break;t.s[mv[0]]=mv[1];t.s[mv[2]]=mv[3];t=localSearch(t,f).t;cur=f(ev(t))}
+    if(!mv)break;t.s[mv[0]]=mv[1];t.s[mv[2]]=mv[3];t=localSearch(t,f).t;cur=f(evq(t))}
   return canon(t)}
 function optimizeF(f){
   let best=null;const R=Math.max(1,state.settings.restarts|0);
@@ -541,6 +596,8 @@ function solve(song,obj){
         slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};}
   }
   if(CHAL_CACHE&&ck&&(obj==='ptTotal'||obj==='itemTotal'))CHAL_CACHE[ck]=chal;
+  // チャレンジ編成を探したかキャッシュから取ったかで乱数の進み方が変わらないよう、本探索は同じ種からやり直す（全曲比較と最適化タブで同じ編成になる）
+  if(obj==='ptTotal'||obj==='itemTotal')seedRnd(SEED0);
   if(obj==='gkscore'&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
   prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',obj==='gkscore');CTX.vpc=chal?chal.vpc:0;CTX.wantMax=obj==='maxscore';
   if(M.length<5)return{error:'メンバーが5人未満です（除外中を含めて確認してください）。'};
@@ -558,7 +615,7 @@ function solve(song,obj){
     const t=optimizeF(f);return{best:pack(t),frontier:[],chal,songId:song.id};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
-  const frontier=[];
+  const frontier=[];let topT=null;
   // 目標ランクごとに「必要スコアを満たす中でボーナス最大」を探す
   for(let r=0;r<RANKS.length;r++){
     const th=r===0?0:song.thr?.[RANKS[r]];if(r>0&&!(th>0))continue;const need=th/lowF();
@@ -571,7 +628,17 @@ function solve(song,obj){
     // 副目的を入れると局所解に落ちやすいので、主目的だけの探索結果も候補にして良い方を採る
     // f0の結果からfで仕上げ探索もして、3つのうち最良を採る
     const t1=optimizeF(f0),t2=optimizeF(f),t3=canon(localSearch(JSON.parse(JSON.stringify(t1)),f).t);
-    const t=polish2([t1,t2,t3].reduce((a,b)=>f(ev(b))>f(ev(a))?b:a),f);const p=pack(t);
+    // 出発点を増やす: 他のランクで見つけた編成と、スコア最大の編成（必要スコアを満たしやすい）から局所探索する。
+    // ランダムな出発点だけだと、ボーナスの高い編成に必要スコアを割らずに移れない局所解に止まることがある
+    const cands=[t1,t2,t3];
+    if(state.settings.warmStart!==false&&r>0){if(!topT)topT=optimizeF(e=>e.lo);
+      for(const w of [topT,...frontier.map(p=>p.t)])cands.push(canon(localSearch(JSON.parse(JSON.stringify(w)),f).t))}
+    // 緩めた探索: 必要スコアを少し割るのを罰金つきで許してボーナスを上げ、罰金を段階的に重くして必要スコアに戻す
+    // （メンバー1人とスナップ2枚を同時に替えないと届かない編成への道。罰金は不足1%あたり lam ポイント）
+    if(r>0&&state.settings.relax!==false){let w=JSON.parse(JSON.stringify(cands.reduce((a,b)=>f(evq(b))>f(evq(a))?b:a)));
+      for(const lam of (state.settings.relax||[3,10,30,100,300])){const g=e=>e[bonusKey]+e[sub]*1e-4-Math.max(0,need-e.lo)/need*lam*100+e.lo/need*1e-6;w=localSearch(w,g).t}
+      cands.push(canon(localSearch(w,f).t))}
+    const t=polish2(cands.reduce((a,b)=>f(evq(b))>f(evq(a))?b:a),f);const p=pack(t);
     if(p.e.lo>=need)frontier.push({...p,target:r,need});
   }
   // 同じ編成の重複を除く
@@ -696,8 +763,8 @@ function renderResult(){
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
-// どちらも「今の目的・手持ち・イベント」で最適化を何度も回す。画面が固まらないよう1件ずつ setTimeout で進め、
-// 探索は軽め（試行回数を減らす）にする。別のツールや最適化を始めたら古い実行は止まる（toolRun の世代で判定）
+// どちらも「今の目的・手持ち・イベント」で最適化を何度も回す。画面が固まらないよう1件ずつ setTimeout で進める。
+// 全曲比較は最適化タブと同じ探索（同じ種）、育成の優先度は候補が多いので軽め（試行回数を減らす）。別のツールや最適化を始めたら古い実行は止まる（toolRun の世代で判定）
 let toolRun=0,toolOut=null,cmpOut=null;
 const TOOL_FAST={restarts:16,minRestarts:8,stopHits:4};
 const PLAY_OVERHEAD=40; // 1回あたりの曲以外の時間（選曲・ロード・リザルト）の目安・秒
@@ -728,7 +795,7 @@ function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o=
       <label class="f">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
       <button class="btn primary" data-act="cmpSongs"${busy?' disabled':''}>全曲を計算</button>
     </div>
-    <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます（探索は軽めのため、1曲ずつの最適化より少し低く出ることがあります）。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
+    <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます。最適化タブで1曲ずつ計算したときと同じ編成・値になります。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
   <div id="cmp">${cmpHtml()}</div></div>`}
 function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
   const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
@@ -748,7 +815,7 @@ function startCompare(){
   const list=state.songs.filter(s=>obj==='gkscore'?s.gkTypes?.length:obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
   cmpOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintCmp();
   const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
-    let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=withFast(()=>solve(s,obj))}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
+    let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
     const b=r.best;cmpOut.rows.push(b?{id:s.id,name:s.name,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
     cmpOut.done++;if(cmpOut.done>=cmpOut.total)CHAL_CACHE=null;paintCmp();if(cmpOut.done<cmpOut.total)setTimeout(step,0)};
   setTimeout(step,30)}
