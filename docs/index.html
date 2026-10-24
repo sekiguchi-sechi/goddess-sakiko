@@ -612,20 +612,24 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
 // 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
 function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
 // 数値ブロック（最適・次善で同じレイアウト）
-function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
+// 目的ごとに見る項目だけ出す: スコアが目的（フリー最高・撃奏）ならイベントの数字は出さない。pt目的ならアイテム側、バッジ目的ならpt側を省く。
+// チャレンジライブはフリーで遊んだときの数字（1回あたり・獲得チャレンジpt）を省く
+function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank)),o=R.obj;
+  const ev=o==='ptTotal'||o==='itemTotal'||o==='chscore',showPt=ev&&o!=='itemTotal',showIt=ev&&o!=='ptTotal',freePlay=o==='ptTotal'||o==='itemTotal';
   return`<div class="kpis">
       <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
       ${ordKpis(R,P,e)}
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
-      <div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>
-      <div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>
-      <div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>
-      <div class="kpi"><div class="k">アイテム / 回</div><div class="v">${fmt(vals[1])}</div></div>
-      <div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>
+      ${showPt?`<div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>`:''}
+      ${showIt?`<div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>`:''}
+      ${freePlay&&showPt?`<div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>`:''}
+      ${freePlay&&showIt?`<div class="kpi"><div class="k">アイテム / 回（LB${st.lb}）</div><div class="v">${fmt(vals[1])}</div></div>`:''}
+      ${freePlay?`<div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>`:''}
       ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
-        return`<div class="kpi wide"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
-        <div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
+        const u=showPt?'pt':'アイテム';
+        return`<div class="kpi"><div class="k">チャレンジ編成 ${m}倍1回 ${u}</div><div class="v">${fmt(showPt?cpt:cit)}</div></div>
+        <div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）${u}</div><div class="v">${fmt(showPt?vals[0]+cpt*sh:vals[1]+cit*sh)}</div></div>`})()
       :R.obj==='chscore'?`<div class="kpi wide"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`:''}
     </div>`}
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
