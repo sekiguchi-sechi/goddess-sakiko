@@ -550,9 +550,11 @@ function solve(song,obj){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
     let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score;
-    if(obj==='gkscore'&&state.settings.gkReq!==false){const ty=new Set(song.gkTypes||[]);if(ty.size===1){const k=[...ty][0],st=state.settings;
+    // 区間の種類が混ざった曲（全部入り）でも、JUST区間があれば判定幅スナップを最低1枚入れる（無いと実戦でJUSTが取りにくい）
+    if(obj==='gkscore'&&state.settings.gkReq!==false){const ty=new Set(song.gkTypes||[]),st=state.settings;if(ty.size===1){const k=[...ty][0];
       const need=({JUST:st.gkNeedJ??4,COMBO:st.gkNeedC??4,LUCK:st.gkNeedL??2})[k]||0,nj=k==='JUST'?(st.gkNeedJudge??2):0;
-      f=e=>{const sh=Math.max(0,need-((e.mk||{})[k]||0))+Math.max(0,nj-(e.nj||0));return e.score*(sh?0.5-0.05*sh:1)}}}
+      f=e=>{const sh=Math.max(0,need-((e.mk||{})[k]||0))+Math.max(0,nj-(e.nj||0));return e.score*(sh?0.5-0.05*sh:1)}}
+      else if(ty.has('JUST')){const nj=st.gkNeedJudgeMix??1;f=e=>{const sh=Math.max(0,nj-(e.nj||0));return e.score*(sh?0.5-0.05*sh:1)}}}
     const t=optimizeF(f);return{best:pack(t),frontier:[],chal,songId:song.id};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
@@ -958,7 +960,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
       <label class="f">タイプリンク：スナップ覚醒1段階あたり %<input type="number" data-set="typeLink" value="${st.typeLink}" step="0.5"></label>
       <label class="f">タイプボーナス（楽曲タイプ一致）：メンバー覚醒1段階あたり %<input type="number" data-set="musicType" value="${st.musicType}" step="0.5"></label>
       <label class="f">得意楽曲：メンバー覚醒1段階あたり %<input type="number" data-set="tokui" value="${st.tokui}" step="0.5"></label>
-      <label class="f"><input type="checkbox" data-set="gkReq" ${st.gkReq!==false?'checked':''}> 撃奏：勝てる編成の条件を必須にする（JUSTスキル4人＋判定幅スナップ2枚／COMBOスキル4人／LUCKスキル2人）</label>
+      <label class="f"><input type="checkbox" data-set="gkReq" ${st.gkReq!==false?'checked':''}> 撃奏：勝てる編成の条件を必須にする（JUSTスキル4人＋判定幅スナップ2枚／COMBOスキル4人／LUCKスキル2人／区間が混ざった曲でJUST区間があれば判定幅スナップ1枚）</label>
       <label class="f">ランク判定に使うスキル順の悪いケース（ばらつきの何倍下か）<input type="number" data-set="orderZ" value="${st.orderZ??1.28}" step="0.1"></label>
       <label class="f">T.G.W CARD 全パラメータ %<input type="number" data-set="vip" value="${st.vip}" step="1"></label>
       <label class="f">探索の試行回数<input type="number" data-set="restarts" value="${st.restarts}" min="1"></label>
