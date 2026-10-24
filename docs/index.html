@@ -348,7 +348,10 @@ function prep(song,ch,gkMode){
     // パラメータ別の比率（P/T/V未入力なら1/3ずつ）。リーダースキルは単一パラメータ対象が多い
     const sum=(m.pP||0)+(m.pT||0)+(m.pV||0);
     const share=sum>0&&m.pP>0&&m.pT>0&&m.pV>0?{P:m.pP/sum,T:m.pT/sum,V:m.pV/sum}:{P:1/3,T:1/3,V:1/3};
-    return{...c,ev,share,B:m.power*(1+(ch?ev.param:0)/100)+rankBonus(m.chara),sk:(m.skillPct||0)/100,sec:m.skillSec||0,
+    // ゲームと同じく Pfm・Tec・Vis ごとに計算する（par）。キャラランク加算は3パラメータに等分、イベントのパラメータ%は切り捨て
+    const rb=rankBonus(m.chara),ep=(ch?ev.param:0)/100,raw=sum>0&&m.pP>0&&m.pT>0&&m.pV>0?[m.pP,m.pT,m.pV]:[m.power/3,m.power/3,m.power/3];
+    const awk=(m.awak|0)+1,smT=((stype==='all'||stype===m.type)?MT:0)*awk,smG=(song.band&&song.band===band?TG*awk:0);
+    return{...c,ev,share,par:raw.map(x=>x+flr(x*ep)+rb/3),smT,smG,B:m.power*(1+(ch?ev.param:0)/100)+rankBonus(m.chara),sk:(m.skillPct||0)/100,sec:m.skillSec||0,
       bandItem:(st.bandItem[band]||0)/100,
       smatch:((stype==='all'||stype===m.type)?MT:0)*((m.awak|0)+1)+(song.band&&song.band===band?TG*((m.awak|0)+1):0),
       lead:(m.leader||[]).filter(l=>l.pct).map(l=>{const [k,v,v2]=String(l.cond).split(':');return{k,v,v2,s:l.stat||'all',p:l.pct/100}})};
@@ -363,13 +366,20 @@ function prep(song,ch,gkMode){
   const gkCnt={COMBO:0,JUST:0,LUCK:0};if(gk)for(const t of song.gkTypes||[])gkCnt[t]=(gkCnt[t]||0)+1;
   CTX={gk,gkCnt,gkQ:(st.gkQ??162)/100,gkEff:st.gkEff||{COMBO:17,JUST:17,LUCK:11},gkBase:st.gkBase||{COMBO:0,JUST:32,LUCK:0},TL,VIP,SE:st.skillEff??0.5,K:song.K||1,T:Math.max(1,song.len||120),song,ch:!!ch,sb:song.sb,sw:song.sw,rt:song.rt?{b:song.rt.b}:null,AW,kf:song.kf||st.scoreAdj||1};
 }
-function leadPct(L,m){let p=0;for(const l of L.lead){if(l.k==='all'||(l.k==='type'&&m.type===l.v)||(l.k==='band'&&m.band===l.v)||(l.k==='chara'&&m.chara===l.v)||(l.k==='bandtype'&&m.band===l.v&&m.type===l.v2)||(l.k==='skill'&&m.liveKind===l.v)||(l.k==='geki'&&m.gekiKind===l.v))p+=l.p*(l.s==='all'?1:m.share[l.s])}return p}
+// 総合力はゲームの「総合力詳細」と同じ計算: メンバーごと・パラメータ（Pfm/Tec/Vis）ごとに各ボーナスを掛けて切り捨て、足し合わせる。
+// スナップ補正はスナップのパラメータ別%、リーダースキルは対象パラメータだけ（同じパラメータへの%は合計してから切り捨て）。
+// 2026-10-25 実機の内訳（革命道中・祥子リーダー）と各項目0〜1の差で一致
+const flr=x=>Math.floor(x+1e-7),PTV=['P','T','V'];
+const leadHit=(l,m)=>l.k==='all'||(l.k==='type'&&m.type===l.v)||(l.k==='band'&&m.band===l.v)||(l.k==='chara'&&m.chara===l.v)||(l.k==='bandtype'&&m.band===l.v&&m.type===l.v2)||(l.k==='skill'&&m.liveKind===l.v)||(l.k==='geki'&&m.gekiKind===l.v);
+// メンバー×スナップで決まる分（リーダースキル以外）
+function pairPow(m,s){const {VIP}=CTX,tl=(s.type&&s.type===m.type?(s.tl||0):0);let p=0;
+  for(let k=0;k<3;k++){const a=m.par[k],sc=s.cv?s.cv[PTV[k]]:s.c;p+=a+flr(a*VIP)+flr(a*sc)+flr(a*s.evp)+flr(a*m.bandItem)+flr(a*tl)+flr(a*m.smT)+flr(a*m.smG)}return p}
+// リーダー L のリーダースキルがメンバー m に足す分
+function leadPow(L,m){let p=0;for(let k=0;k<3;k++){let q=0;for(const l of L.lead)if((l.s==='all'||l.s===PTV[k])&&leadHit(l,m))q+=l.p;if(q)p+=flr(m.par[k]*q)}return p}
 function ev(t){
   const L=M[t.m[t.L]],{TL,VIP,K,T,SE,gk}=CTX;let P=0,Sk=0,pt=0,it=0,GB=0;const slots=[],ys=[];
   for(let i=0;i<5;i++){const m=M[t.m[i]],s=S[t.s[i]];
-    const sc=s.cv?s.cv.P*m.share.P+s.cv.T*m.share.T+s.cv.V*m.share.V:s.c;
-    const mult=1+VIP+sc+s.evp+m.bandItem+(s.type&&s.type===m.type?(s.tl||0):0)+m.smatch+leadPct(L,m);
-    const sp=m.B*mult;P+=sp;
+    const sp=pairPow(m,s)+leadPow(L,m),mult=sp/m.B;P+=sp;
     const ext=(s.band&&s.band===m.band)?(s.extB!=null&&s.extB!==''?+s.extB:s.ext*2):s.ext;
     const sk=SE*m.sk*Math.min(m.sec+ext,T)/T;Sk+=sk;
     // bdon.moe モデル用: スキル%×(発動秒数/5秒)。延長した分も同じノーツ密度とみなす
@@ -443,13 +453,12 @@ function buildFast(){const nM=M.length,nS=S.length,{VIP,T,SE,gk}=CTX,N=nM*nS;
   const base=new Float64Array(N),sk=new Float64Array(N),y=new Float64Array(N),pt=new Float64Array(N),it=new Float64Array(N),nj=new Float64Array(N),LP=new Float64Array(nM*nM);
   const G=gk?CTX.song.gk2:null,sv=G?new Array(N):null,mv=G?M.map(m=>m.gs!=null?[G.v[m.gs+'|'],m.gl?m.gl-1:(m.awak|0)]:null):null;
   for(let a=0;a<nM;a++){const m=M[a];for(let b=0;b<nS;b++){const s=S[b],j=a*nS+b;
-    const sc=s.cv?s.cv.P*m.share.P+s.cv.T*m.share.T+s.cv.V*m.share.V:s.c;
-    base[j]=1+VIP+sc+s.evp+m.bandItem+(s.type&&s.type===m.type?(s.tl||0):0)+m.smatch;
+    base[j]=pairPow(m,s);
     const ext=(s.band&&s.band===m.band)?(s.extB!=null&&s.extB!==''?+s.extB:s.ext*2):s.ext;
     sk[j]=SE*m.sk*Math.min(m.sec+ext,T)/T;y[j]=m.sk*(m.sec+ext)/5;pt[j]=m.ev.pt+s.ev.pt;it[j]=m.ev.item+s.ev.item;
     if(s.gkJudgeAll)nj[j]=(s.band&&s.band===m.band)?1:0.5;
     if(G&&s.gs!=null){const k1=s.gs+'|'+((s.band&&s.band===m.band)?1:0);sv[j]=[G.v[G.v[k1]?k1:s.gs+'|'],s.lb|0]}}
-    for(let c=0;c<nM;c++)LP[c*nM+a]=leadPct(M[c],m)}
+    for(let c=0;c<nM;c++)LP[c*nM+a]=leadPow(M[c],m)}
   let g2=null;if(G){const st=state.settings;g2={G,KK:{1:st.gk2C??1.33,2:st.gk2L??1.06,3:st.gk2J??1.01},LV:[.45,.55,.64,.73,1],a0:Math.pow(st.gk2A0??(st.gkJust??20)/100,st.gk2G??0.88),a1:st.gk2A1??0.15,JP:st.gk2JP??0.92,gkf:CTX.song.gkf||1};
     g2.sec=G.r.map(r=>({j:r[0]===3,f1:r[3][0]/r[3][0],f2:r[3][1]/r[3][0],kk:g2.KK[r[0]]??1}))}
   const AF=CTX.AW?new Float64Array(N*5):null;if(AF)for(let a=0;a<nM;a++)for(let b=0;b<nS;b++){const row=CTX.AW[a][b],o=(a*nS+b)*5;for(let k=0;k<5;k++)AF[o+k]=row[k]}
@@ -459,7 +468,7 @@ const EQ_Y=new Float64Array(5),EQ_J=new Int32Array(5),EQ_A=[null,null,null,null,
 function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return ev(t);
   const nS=F.nS,nM=F.nM,Li=t.m[t.L],K=CTX.K,gk=CTX.gk;let P=0,Sk=0,pt=0,it=0;const ys=EQ_Y,J=EQ_J;
   for(let i=0;i<5;i++){const a=t.m[i],j=a*nS+t.s[i];J[i]=j;
-    P+=F.B[a]*(F.base[j]+F.LP[Li*nM+a]);Sk+=F.sk[j];ys[i]=F.y[j];pt+=F.pt[j];it+=F.it[j]}
+    P+=F.base[j]+F.LP[Li*nM+a];Sk+=F.sk[j];ys[i]=F.y[j];pt+=F.pt[j];it+=F.it[j]}
   let free=K*P*(1+Sk);
   if(gk){const {G,KK,LV,a0,a1,JP,gkf}=F.g2;
     let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
