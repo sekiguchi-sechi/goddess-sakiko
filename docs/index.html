@@ -124,6 +124,14 @@ label.f.dim:hover,label.f.dim:focus-within{opacity:.75}
 footer.foot{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 32px;color:var(--muted);font-size:11px}
 @media (max-width:480px){.hero{padding:18px}.panel{padding:14px}nav.tabs button{padding:8px 10px 9px;font-size:13px}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* リトライ判断の木 */
+.rt-tree,.rt-tree ul{list-style:none;margin:0;padding-left:0}
+.rt-tree ul{padding-left:18px;border-left:1px solid var(--line);margin:4px 0 4px 6px}
+.rt-tree li{margin:4px 0;line-height:1.9}
+.rt-ok{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--accent);color:var(--accent);font-weight:700;font-size:12.5px;margin:1px 2px}
+.rt-ok small{font-weight:600;opacity:.85}
+.rt-ng{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);font-size:12.5px;margin:1px 2px}
 </style>
 
 <header class="top">
@@ -718,6 +726,23 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
   const rr=[P.rank,P.rank+1].filter(r=>r>0&&r<RANKS.length).map(r=>[r,reach(r)]).filter(([r,c])=>c!=null&&(c>0||r===P.rank));
   return`<div class="kpi wide"><div class="k">発動順120通りの最低〜最高</div><div class="v" style="font-size:17px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div></div>
       ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
+// リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
+// 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
+function retryHtml(e){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.map(x=>x.m.chara),O=e.ord,N=O.length;
+  const pct=Math.min(50,Math.max(1,+state.settings.retryTop||10)),need=Math.max(1,Math.ceil(N*pct/100)),T=O[N-need].s;
+  const node=(pre,S,depth)=>{const k=pre.length;const ok=[],ng=[];
+    for(let i=0;i<5;i++){if(pre.includes(i))continue;const C=S.filter(o=>o.p[k]===i);const hit=C.filter(o=>o.s>=T).length;(hit?ok:ng).push({i,C,hit})}
+    ok.sort((a,b)=>b.hit/b.C.length-a.hit/a.C.length);
+    const lab=pre.length?`${pre.map(i=>esc(nm[i])).join(' → ')} のあと、`:'';
+    let h=`<li><span class="muted">${lab}${k+1}番目：</span>${ok.map(x=>`<span class="rt-ok">続行 ${esc(nm[x.i])} <small>${Math.round(x.hit/x.C.length*100)}%</small></span>`).join(' ')}${ng.length?` <span class="rt-ng">リトライ ${ng.map(x=>esc(nm[x.i])).join('・')}</span>`:''}`;
+    const kids=ok.filter(x=>x.hit<x.C.length&&k<3);
+    if(kids.length)h+=`<ul>${kids.map(x=>node([...pre,x.i],x.C,depth+1)).join('')}</ul>`;
+    return h+'</li>'};
+  return`<details class="panel" data-retry${state.ui.retryOpen===false?'':' open'}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
+    <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
+    <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）。1回で届く確率 ${Math.round(need/N*100)}%、平均 ${(N/need).toFixed(1)} 回で届きます</span></div>
+    <ul class="rt-tree">${node([],O,0)}</ul>
+    <p class="note" style="margin:6px 0 0">「続行」の％は、そこまでの発動順のまま最後までいったときに目標に届く確率。「リトライ」の人がその番目で発動したら、もう目標には届きません。％が100%になった分かれ道は、あとは誰が来ても届きます。</p></details>`}
 // 番目ごとの重みと、メンバー×番目の増えるスコア。スコア＝総合力×(基礎＋Σ スキル%×重み(番目, スキルの長さ))（haneoka の重み表）
 // 重みはスキルの長さ（5秒＋スナップの延長）で変わるので、メンバーごとの長さで計算した値を表にする（40-model.js の prep と同じ補間）
 function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const n=W.length,kf=song.kf||1;
@@ -785,7 +810,7 @@ function renderResult(){
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${R.obj!=='gkscore'?slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
+  </div>${R.obj!=='gkscore'?retryHtml(e)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
@@ -1173,6 +1198,7 @@ document.addEventListener('change',e=>{
   if(el.id==='lb'){state.settings.lb=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
   if(el.id==='chMult'){state.settings.chMult=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
   if(el.id==='margin'){state.settings.margin=+el.value||0;save();return}
+  if(el.id==='retryTop'){state.settings.retryTop=Math.min(50,Math.max(1,Math.round(+el.value)||10));save();const r=document.getElementById('result');if(r&&lastResult)r.innerHTML=renderResult();return}
   if(el.id==='gkJust'){state.settings.gkJust=Math.max(0,Math.min(100,+el.value||0));save();return}
   if(el.id==='evName'){state.event.name=el.value;save();return}
   if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
@@ -1200,6 +1226,7 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   if(d.matches('details[data-kpi]')){state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open})}
   else if(d.matches('details[data-fr]'))state.ui.frOpen=d.open;
   else if(d.matches('details[data-slotw]'))state.ui.slotWOpen=d.open;
+  else if(d.matches('details[data-retry]'))state.ui.retryOpen=d.open;
   else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
   else return;
   save()},true);
