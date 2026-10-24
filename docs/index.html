@@ -1,4 +1,4 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body><title>アワーノーツ最適編成ツール</title>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body><title>Goddess Sakiko</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -129,7 +129,7 @@ footer.foot{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-i
 <header class="top">
   <div class="hero">
     <p class="eyebrow">BanG Dream! Our Notes</p>
-    <h1>アワーノーツ最適編成ツール</h1>
+    <h1>Goddess Sakiko</h1>
     <p class="sub">手持ちのメンバーとスナップから、イベントpt・バッジ・スコアごとに最適な編成を計算します</p>
   </div>
 </header>
@@ -1118,7 +1118,7 @@ document.addEventListener('click',e=>{
     case'clearRoster':if(!confirm('手持ちの登録をすべて消しますか？'))return;state.roster={m:{},s:{}};state.rosterSrc='';materialize();lastResult=null;break;
     case'goMembers':state.ui.tab='members';break;
     case'showAll':cardFilter().own='all';break;
-    case'exportFile':{const name='ournotes-deck-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(exportData(),null,1);
+    case'exportFile':{const name='goddess-sakiko-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(exportData(),null,1);
       (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);msg('書き出しました（ダウンロードフォルダを確認してください）。');return}
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
