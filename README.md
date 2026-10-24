@@ -2,7 +2,7 @@
 
 バンドリ！アワーノーツの手持ちカードから、目的別の最適編成を探す非公式ツールです。
 
-**公開ページ:** https://sekiguchi-sechi.github.io/awano-lab/
+**公開ページ:** https://sekiguchi-sechi.github.io/goddess-sakiko/
 
 ## できること
 
