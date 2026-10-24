@@ -127,7 +127,7 @@ const OWNER_VIP=0;
 const MY_BAND_ITEM={};
 const OBJECTIVES=[
   // フリーのスコア目的は「理論上の最高（発動順120通りで最良）」だけにした（2026-10-24。平均を最大にする目的と編成が違うのは91曲中9曲・差0.4%以内）
-  {id:'maxscore',label:'フリーライブ：最高スコア（理論上の最高・発動順が最良の場合）'},
+  {id:'maxscore',label:'フリーライブ：最高スコア'},
   {id:'ptTotal',label:'イベントpt最大（フリー＋チャレンジ）'},
   {id:'itemTotal',label:'イベントバッジ最大（フリー＋チャレンジ）'},
   {id:'chscore',label:'チャレンジライブ：スコア最大（ランキング用）'},
@@ -626,7 +626,7 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
       ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
         return`<div class="kpi wide"><div class="k">チャレンジ編成 ${m}倍1回 pt / アイテム</div><div class="v">${fmt(cpt)} / ${fmt(cit)}</div></div>
         <div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）pt / アイテム</div><div class="v">${fmt(vals[0]+cpt*sh)} / ${fmt(vals[1]+cit*sh)}</div></div>`})()
-      :`<div class="kpi"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`}
+      :R.obj==='chscore'?`<div class="kpi wide"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`:''}
     </div>`}
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
