@@ -112,7 +112,6 @@ button.fchip.chip{color:#fff;border-color:transparent;opacity:.42;padding:2px 11
 button.fchip.chip.on{opacity:1;box-shadow:0 0 0 2px var(--accent)}
 button.fchip.t-紅赤{background:var(--t-red)}button.fchip.t-紺碧{background:var(--t-blue)}button.fchip.t-翡翠{background:var(--t-green)}button.fchip.t-山吹{background:var(--t-yellow)}button.fchip.t-紫苑{background:var(--t-purple)}
 button.fclear{font:inherit;font-size:11px;border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:2px 4px}
-.panel.alt{border-style:dashed;background:color-mix(in srgb,var(--panel) 70%,var(--bg))}
 .combo-opt small.gk{margin-left:6px;font-size:11px;color:var(--muted);white-space:nowrap}
 .frbox>summary{cursor:pointer}
 .jsonhelp>summary{cursor:pointer;color:var(--muted);font-size:13px}.jsonfmt{font-size:12px;white-space:pre;overflow-x:auto;background:var(--panel-2);border:1px solid var(--line);padding:10px;border-radius:10px;margin:6px 0}
@@ -527,8 +526,6 @@ function optimizeF(f){
 // 並び順だけ違う同じ編成が毎回違って見えないよう、リーダーを先頭・残りはメンバー一覧順に並べ替える
 function canon(t){const idx=[0,1,2,3,4].sort((a,b)=>(b===t.L)-(a===t.L)||t.m[a]-t.m[b]);
   return{...t,m:idx.map(i=>t.m[i]),s:idx.map(i=>t.s[i]),lm:idx.map(i=>t.lm[i]),ls:idx.map(i=>t.ls[i]),L:0}}
-// 推定ランクに届かない（安定しない）場合の次善: それより下のランクを狙う候補のうち価値が最大のもの
-function altOf(R){if(!R||!R.best||!R.frontier)return null;if(R.safe)return R.safe;return R.frontier.filter(p=>p.rank<R.best.rank).reduce((a,b)=>!a||b.val>a.val?b:a,null)}
 // 楽曲比較・育成優先度で同じチャレンジ編成を何度も探さないための一時キャッシュ（ツール実行中だけ使う）
 let CHAL_CACHE=null;
 function solve(song,obj){
@@ -541,8 +538,7 @@ function solve(song,obj){
     const cr=solve(chSong,obj==='ptTotal'?'chpt':'chitem');state.settings.chMult=keep;
     if(cr.best){const e=ev({...cr.best.t,detail:true});
       chal={song:chSong.name,rank:RANKS[cr.best.rank],score:e.score,lo:e.lo,hi:e.hi,pt:e.pt,it:e.it,P:e.P,per1600:cr.best.val*8,vpc:cr.best.val/200,
-        slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};
-      const ca=altOf(cr);if(ca){const e2=ev({...ca.t,detail:true});chal.alt={extra:ca.extra,rank:RANKS[ca.rank],score:e2.score,lo:e2.lo,hi:e2.hi,pt:e2.pt,it:e2.it,P:e2.P,val:ca.val*8,ratio:ca.val/cr.best.val,slots:e2.slots.map((x,i)=>slotRow(x,i===ca.t.L))}}}
+        slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};}
   }
   if(CHAL_CACHE&&ck&&(obj==='ptTotal'||obj==='itemTotal'))CHAL_CACHE[ck]=chal;
   if(obj==='gkscore'&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
@@ -582,12 +578,7 @@ function solve(song,obj){
   // 価値が同じなら、もう一方のボーナス→スコアの高い方（同点の選び方で毎回結果が変わらないように）
   const sub=bonusKey==='pt'?'it':'pt';
   const best=fr.reduce((a,b)=>!a||b.val>a.val||(b.val===a.val&&(b.e[sub]>a.e[sub]||(b.e[sub]===a.e[sub]&&b.e.score>a.e.score)))?b:a,null);
-  // 次善（安定重視）: 推定ランクはそのままで、ランク判定の余裕を +3% 広げても届く中でボーナス最大の編成
-  let safe=null;
-  if(best&&best.rank>0){const SAFE=state.settings.safeExtra??3,th=song.thr?.[RANKS[best.rank]]||0,need2=th/(1-(state.settings.margin+SAFE)/100);
-    const g=e=>e.lo>=need2?1e15+e[bonusKey]*1e6+e[sub]*1e2+e.lo*1e-5:e.lo;const t=optimizeF(g);const p=pack(t);
-    if(p.e.lo>=need2&&p.rank===best.rank&&(p.e.pt!==best.e.pt||p.e.it!==best.e.it||p.e.lo>best.e.lo))safe={...p,extra:SAFE}}
-  return{best,frontier:fr,bonusKey,chal,songId:song.id,safe};
+  return{best,frontier:fr,bonusKey,chal,songId:song.id};
 }
 
 // ===== 描画 =====
@@ -646,7 +637,7 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
       ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
 // 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
 function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
-// 数値ブロック（最適・次善で同じレイアウト）
+// 数値ブロック
 // 目的ごとに見る項目だけ出す: スコアが目的（フリー最高・撃奏）ならイベントの数字は出さない。pt目的ならアイテム側、バッジ目的ならpt側を省く。
 // チャレンジライブはフリーで遊んだときの数字（1回あたり・獲得チャレンジpt）を省く
 function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank)),o=R.obj;
@@ -673,7 +664,6 @@ function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">�
       <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
-const altTitle=a=>a.extra?`次善（同じランクで余裕を＋${a.extra}%）`:'次善（1つ下のランク）';
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
@@ -693,21 +683,14 @@ function renderResult(){
     chalHtml=`<div class="panel stack"><h2>チャレンジ — ${esc(C.song)}</h2>
     <p class="note">フリーライブ1回（LB${st.lb}）で：直接 ${fmt(direct)} ＋ チャレンジpt ${cp} → チャレンジライブ換算 ${fmt(cp*C.vpc)}（合計 ${fmt(direct+cp*C.vpc)}）。チャレンジpt 1あたり ${C.vpc.toFixed(1)}${isPt?'pt':'個'}。チャレンジライブではイベント対象カードの総合力がボーナス分上がります（パラメータボーナス）。</p>
     ${kpiBox(chalKpis(C))}
-    ${teamTable(C.slots)}</div>${C.alt?`<div class="panel stack alt"><h2>チャレンジ ${altTitle(C.alt)} — ${esc(C.song)}</h2>
-    <p class="note">推定ランクに届かないとき（安定しないとき）はこちら。最適より ${Math.round((C.alt.ratio-1)*1000)/10}%。</p>
-    ${kpiBox(chalKpis({...C.alt,per1600:C.alt.val}))}
-    ${teamTable(C.alt.slots)}</div>`:''}`}
+    ${teamTable(C.slots)}</div>`}
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${shownIdx==null?(()=>{const a=altOf(R);if(!a)return'';const e2=ev({...a.t,detail:true});
-    return`<div class="panel stack alt"><h2>${R.chal?'フリー':esc(objLabel)} ${altTitle(a)} — ${esc(song.name)}</h2>
-    <p class="note">推定ランクに届かないとき（安定しないとき）はこちら。最適より ${Math.round((a.val/R.best.val-1)*1000)/10}%。</p>
-    ${kpiBox(freeKpis(R,a,e2))}
-    ${teamTable(e2.slots.map((x,i)=>slotRow(x,i===a.t.L)))}</div>`})():''}${chalHtml}${fr}</div>`;
+  </div>${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
