@@ -186,7 +186,7 @@ function defaultSettings(){return{
   gkWinAt:9, gkLoseAt:5,
   typeLink:5, musicType:5, tokui:5, vip:0, skillEff:0.51, uniqueChara:true, margin:1, orderZ:1.28, scoreAdj:1.005, restarts:100,
   bandItem:Object.fromEntries(BAND_NAMES.map(b=>[b,0])),
-  ver:28,
+  ver:29,
   // E は情報なし。閾値未入力でも比較できるよう D と同値で置く
   ptBase:{E:15,D:15,C:25,B:35,A:50,S:75,SS:100},
   itemBase:{E:18,D:18,C:30,B:42,A:60,S:90,SS:120},
@@ -248,15 +248,17 @@ if(state.settings&&state.settings.ver<18){Object.assign(state.settings,{gkQ:150,
   if(state.settings&&state.settings.ver<21){state.settings.restarts=Math.max(state.settings.restarts|0,100);state.settings.ver=21}
   if(state.settings&&state.settings.ver<22){Object.assign(state.settings,{scoreAdj:1.02,orderZ:1.28,ver:22});delete state.settings.chMargin;for(const x of state.songs||[])delete x.kf}
   // 2026-10-18 ゲーム画面で確認したキャラランク・バンドアイテムに更新
-  if(state.settings&&state.settings.ver<23){state.settings.charaRankLv={...OWNER_RANK};state.settings.bandItem={...MY_BAND_ITEM};state.settings.ver=23}
+  if(state.settings&&state.settings.ver<23){if(!PUBLIC){state.settings.charaRankLv={...OWNER_RANK};state.settings.bandItem={...MY_BAND_ITEM}}state.settings.ver=23}
   // 実測6回（微笑みチャレンジ2・Ave Mujica HD 2・天球EX）の平均誤差から全体補正を下げる
   if(state.settings&&state.settings.ver<24){state.settings.scoreAdj=1.005;state.settings.ver=24}
   // 2026-10-19 T.G.W CARD RANK16で全パラメータ15%
   if(state.settings&&state.settings.ver<25){state.settings.vip=15;state.settings.ver=25}
-  if(state.settings&&state.settings.ver<26){state.settings.charaRankLv={...OWNER_RANK};state.settings.ver=26}
+  if(state.settings&&state.settings.ver<26){if(!PUBLIC)state.settings.charaRankLv={...OWNER_RANK};state.settings.ver=26}
   if(state.settings&&state.settings.ver<27){state.settings.ver=27}
   // 発動順120通りの厳密計算で誤差が±0.3%程度になったので、既定の余裕 4% を 1% に（自分で変えた値はそのまま）
   if(state.settings&&state.settings.ver<28){if(state.settings.margin===4)state.settings.margin=1;state.settings.ver=28}
+  
+  if(state.settings&&state.settings.ver<29){if(!PUBLIC){state.settings.charaRankLv={...OWNER_RANK};state.settings.bandItem={...MY_BAND_ITEM}}state.settings.ver=29}
   if(state.settings&&state.settings.ver<17){Object.assign(state.settings,{gkQ:155,gkQLose:75,gkJudge:28,gkWinAt:11,gkLoseAt:6,ver:17});state.settings.gkEff={COMBO:17,JUST:3,LUCK:11}}
   if(state.settings&&state.settings.ver<16){Object.assign(state.settings,{gkQ:162,gkBase:{COMBO:0,JUST:32,LUCK:0},ver:16});state.settings.gkEff={...(state.settings.gkEff||{}),JUST:17}}
     if(state.settings&&state.settings.ver<15){if(state.settings.gkEff?.COMBO===18)state.settings.gkEff.COMBO=17;state.settings.ver=15}
