@@ -744,6 +744,18 @@ function orderPlanHtml(e){const P=orderPlan(e);if(!P)return'';const pct=v=>`${v>
     ${P.steps.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.t)}</td><td class="num">${s.n}通り <span class="muted">(${Math.round(s.n/P.total*100)}%)</span></td><td class="num"><b>${fmt(s.avg)}</b> <span class="muted">${pct(s.avg)}</span></td><td class="num">${fmt(s.min)}〜${fmt(s.max)}</td></tr>`).join('')}
     </tbody></table></div>
     <p class="note" style="margin:6px 0 0">発動順はライブごとにランダムです。1行目だけそろえば十分伸びる場合が多く、下の行ほど当たりにくくなります。全部そろえた最高は編成表の「最高の発動順」の列です。</p></details>`}
+// 番目ごとの重みと、メンバー×番目の増えるスコア。スコア＝総合力×(基礎＋Σ スキル%×重み(番目, スキルの長さ))（haneoka の重み表）
+// 重みはスキルの長さ（5秒＋スナップの延長）で変わるので、メンバーごとの長さで計算した値を表にする（40-model.js の prep と同じ補間）
+function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const n=W.length,kf=song.kf||1;
+  const wAt=sec=>{const x=Math.min(Math.max((sec-5)*4,0),n-1),j=Math.floor(x),f=x-j;return[0,1,2,3,4].map(k=>f?W[j][k]*(1-f)+W[j+1][k]*f:W[j][k])};
+  const w5=W[0],top=Math.max(...w5),bp=bestOrderPos(e);
+  const rows=e.slots.map((x,i)=>{const len=(x.m.sec||0)+x.ext,a=wAt(len).map(w=>e.P*kf*x.m.sk*w);return{m:x.m,len,a,mx:Math.max(...a),best:bp?.[i]}});
+  return`<details class="panel" data-slotw${state.ui.slotWOpen?' open':''}><summary><b>番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
+    <div class="tbl" style="margin-top:8px"><table><thead><tr><th></th>${[1,2,3,4,5].map(k=>`<th class="num">${k}番目</th>`).join('')}</tr></thead><tbody>
+    <tr><td class="muted">重み（5秒のとき）</td>${w5.map(w=>`<td class="num">${w===top?'<b>':''}${w.toFixed(3)}${w===top?'</b>':''}</td>`).join('')}</tr>
+    ${rows.map(r=>`<tr><td>${esc(r.m.chara)} <span class="muted">${Math.round(r.m.sk*100)}%・${+r.len.toFixed(2)}秒</span></td>${r.a.map((v,k)=>`<td class="num"${r.best===k+1?' style="color:var(--accent)"':''}>${v===r.mx?'<b>':''}+${fmt(v)}${v===r.mx?'</b>':''}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <p class="note" style="margin:6px 0 0">重みは「スキル+100%がその番目で発動したときに足すスコア÷総合力」。下の表は、そのメンバーがその番目で発動したときに増えるスコア（スキル%・発動秒数・総合力込み）。太字は各メンバーで一番伸びる番目、金色は最高の発動順での番目。スコアはこの増分の合計＋基礎なので、全員の合計が大きくなる割り当てが最高です。</p></details>`}
 // 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
 function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
 // 数値ブロック
@@ -799,7 +811,7 @@ function renderResult(){
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${R.obj!=='gkscore'?orderPlanHtml(e):''}${chalHtml}${fr}</div>`;
+  </div>${R.obj!=='gkscore'?orderPlanHtml(e)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
@@ -1214,6 +1226,7 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   if(d.matches('details[data-kpi]')){state.ui.kpiOpen=d.open;document.querySelectorAll('details[data-kpi]').forEach(x=>{if(x!==d&&x.open!==d.open)x.open=d.open})}
   else if(d.matches('details[data-fr]'))state.ui.frOpen=d.open;
   else if(d.matches('details[data-ordplan]'))state.ui.ordPlanOpen=d.open;
+  else if(d.matches('details[data-slotw]'))state.ui.slotWOpen=d.open;
   else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
   else return;
   save()},true);
