@@ -799,12 +799,19 @@ function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o=
   <div id="cmp">${cmpHtml()}</div></div>`}
 function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
   const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
-  const rows=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1));
+  // 表示の絞り込み（バンド・タイプ）。計算はやり直さない
+  const F=cmpFilter(),bandOf=r=>r.band||'その他',all=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1));
+  const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type)));
+  const grp=(k,label,items,typed)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" data-cmpf="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" data-cmpf="${k}" data-v="">解除</button>`:''}</div>`;
+  const bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
   return`<section class="panel stack"><h3 style="margin:0">${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
     ${perMin(T.obj)?`<div class="row"><span class="muted">並べ替え</span><button class="fchip${key==='val'?' on':''}" data-act="cmpSortVal">1回あたり</button><button class="fchip${key==='pm'?' on':''}" data-act="cmpSortMin">1分あたり</button><span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span></div>`:''}
+    <div class="fchips">${grp('band','バンド',bands)}${grp('type','タイプ',TYPES,true)}</div>
+    ${F.band.length||F.type.length?`<p class="muted" style="margin:0">${all.length}曲中 ${rows.length}曲を表示</p>`:''}
     <div class="tbl"><table><thead><tr><th>#</th><th>曲</th><th>推定ランク</th><th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
     ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${r.err?`<td colspan="${3+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`<td><b>${RANKS[r.rank]}</b></td><td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
     </tbody></table></div></section>`}
+function cmpFilter(){const u=state.ui;if(!u.cmpF||!Array.isArray(u.cmpF.band)||!Array.isArray(u.cmpF.type))u.cmpF={band:[],type:[]};return u.cmpF}
 function paintCmp(){const el=document.getElementById('cmp');if(el)el.innerHTML=cmpHtml();const b=document.querySelector('[data-act="cmpSongs"]');if(b)b.disabled=!!(cmpOut&&cmpOut.done<cmpOut.total)}
 function paintTools(){const el=document.getElementById('tools');if(el)el.innerHTML=toolsHtml()}
 // 楽曲比較: 全曲を順に最適化
@@ -816,7 +823,7 @@ function startCompare(){
   cmpOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintCmp();
   const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
     let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
-    const b=r.best;cmpOut.rows.push(b?{id:s.id,name:s.name,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
+    const b=r.best;cmpOut.rows.push(b?{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
     cmpOut.done++;if(cmpOut.done>=cmpOut.total)CHAL_CACHE=null;paintCmp();if(cmpOut.done<cmpOut.total)setTimeout(step,0)};
   setTimeout(step,30)}
 // 育成の優先度: 候補カードを1段階ずつ育てた仮の手持ちで最適化し、目的の値の伸びを比べる
@@ -1101,6 +1108,7 @@ document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');if(tb){state.ui.tab=tb.dataset.tab;save();render();return}
   const sh=e.target.closest('[data-show]');if(sh){const i=+sh.dataset.show;shownIdx=lastResult.frontier[i]===lastResult.best?null:i;document.getElementById('result').innerHTML=renderResult();return}
   const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=null;save();render();return}
+  const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
