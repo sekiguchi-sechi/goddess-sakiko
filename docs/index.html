@@ -124,8 +124,8 @@ const OWNER_RANK={};
 const OWNER_VIP=0;
 const MY_BAND_ITEM={};
 const OBJECTIVES=[
-  {id:'score',label:'フリーライブ：スコア最大'},
-  {id:'maxscore',label:'フリーライブ：最高スコア（発動順が最良の場合・ランキング用）'},
+  // フリーのスコア目的は「理論上の最高（発動順120通りで最良）」だけにした（2026-10-24。平均を最大にする目的と編成が違うのは91曲中9曲・差0.4%以内）
+  {id:'maxscore',label:'フリーライブ：最高スコア（理論上の最高・発動順が最良の場合）'},
   {id:'ptTotal',label:'イベントpt最大（フリー＋チャレンジ）'},
   {id:'itemTotal',label:'イベントバッジ最大（フリー＋チャレンジ）'},
   {id:'chscore',label:'チャレンジライブ：スコア最大（ランキング用）'},
@@ -263,7 +263,8 @@ if(state.settings&&state.settings.ver<18){Object.assign(state.settings,{gkQ:150,
   if(typeof MY_DATA!=='undefined'&&(state.songVer||0)<(MY_DATA.songVer||0)){const by=Object.fromEntries(MY_DATA.songs.map(x=>[x.name,x]));for(const x of state.songs){const d=by[x.name];if(d)Object.assign(x,d)}state.songVer=MY_DATA.songVer}
   state.ui=Object.assign({tab:'opt',song:state.songs[0]?.id,obj:'ptTotal'},state.ui||{});
   materialize();
-  if(!OBJECTIVES.some(o=>o.id===state.ui.obj))state.ui.obj=({item:'itemTotal',chitem:'itemTotal'})[state.ui.obj]||'ptTotal';
+  if(!OBJECTIVES.some(o=>o.id===state.ui.obj))state.ui.obj=({item:'itemTotal',chitem:'itemTotal',score:'maxscore'})[state.ui.obj]||'ptTotal';
+  if(state.ui.cmpObj&&!OBJECTIVES.some(o=>o.id===state.ui.cmpObj))state.ui.cmpObj=state.ui.cmpObj==='score'?'maxscore':'ptTotal';
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
 
@@ -636,7 +637,7 @@ function renderResult(){
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
   if(!R.best)return`<div class="panel warn">どのランクの必要スコアにも届く編成がありません。楽曲の閾値と手持ちを確認してください。</div>`;
   const P=shownIdx!=null?R.frontier[shownIdx]:R.best;
-  const e=ev({...P.t,detail:true});const objLabel=OBJECTIVES.find(o=>o.id===R.obj).label;
+  const e=ev({...P.t,detail:true});const objLabel=OBJECTIVES.find(o=>o.id===R.obj)?.label||'';
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const slots=teamTable(e.slots.map((x,i)=>slotRow(x,i===P.t.L)));
