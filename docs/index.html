@@ -132,6 +132,8 @@ footer.foot{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-i
 .rt-ok{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--accent);color:var(--accent);font-weight:700;font-size:12.5px;margin:1px 2px}
 .rt-ok small{font-weight:600;opacity:.85}
 .rt-ng{display:inline-block;padding:0 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);font-size:12.5px;margin:1px 2px}
+.rt-rules{margin:0;padding-left:22px}
+.rt-rules li{margin:3px 0}
 </style>
 
 <header class="top">
@@ -728,7 +730,22 @@ function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id==
       ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
 // リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
 // 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
-function retryHtml(e){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.map(x=>x.m.chara),O=e.ord,N=O.length;
+// 覚えるルール: 「k番目が○○ならリトライ」「k番目は○○か○○以外ならリトライ」などを、目標に届くまでの平均時間が一番縮むものから
+// 1つずつ足す（最大4つ、ほとんど縮まなくなったら打ち切り）。時間はスキルが曲の中で均等に発動し、リトライ1回に15秒かかると仮定
+const RETRY_SEC=15;
+function retryTime(O,T,L,stopAt){let cost=0,succ=0;for(const o of O){const k=stopAt(o.p);if(k&&k<=4)cost+=L*k/6+RETRY_SEC;else{cost+=L+RETRY_SEC;if(o.s>=T)succ++}}return succ?cost/succ/60:Infinity}
+function retryRules(O,T,L,nm){const C=[];
+  for(let k=0;k<4;k++){for(let i=0;i<5;i++)C.push({t:`${k+1}番目が${nm[i]}ならリトライ`,r:[[i,k]]});
+    for(let a=0;a<5;a++){C.push({t:`${k+1}番目は${nm[a]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a).map(i=>[i,k])});
+      for(let b=a+1;b<5;b++)C.push({t:`${k+1}番目は${nm[a]}か${nm[b]}以外ならリトライ`,r:[0,1,2,3,4].filter(i=>i!==a&&i!==b).map(i=>[i,k])})}}
+  const stop=R=>p=>{for(let j=0;j<5;j++)if(R.some(([i,k])=>k===j&&p[j]===i))return j+1;return 0};
+  let cur=[],t0=retryTime(O,T,L,()=>0),tc=t0;const out=[];
+  for(let n=0;n<4;n++){let best=null;for(const c of C){const t=retryTime(O,T,L,stop([...cur,...c.r]));if(!best||t<best.t-1e-9)best={c,t}}
+    if(!best||best.t>tc-0.1)break;cur=[...cur,...best.c.r];tc=best.t;out.push({t:best.c.t,min:tc})}
+  return{none:t0,rules:out}}
+// リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
+// 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
+function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.map(x=>x.m.chara),O=e.ord,N=O.length,L=Math.max(30,song?.len||120);
   const pct=Math.min(50,Math.max(1,+state.settings.retryTop||10)),need=Math.max(1,Math.ceil(N*pct/100)),T=O[N-need].s;
   const node=(pre,S,depth)=>{const k=pre.length;const ok=[],ng=[];
     for(let i=0;i<5;i++){if(pre.includes(i))continue;const C=S.filter(o=>o.p[k]===i);const hit=C.filter(o=>o.s>=T).length;(hit?ok:ng).push({i,C,hit})}
@@ -738,11 +755,16 @@ function retryHtml(e){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.map(x=
     const kids=ok.filter(x=>x.hit<x.C.length&&k<3);
     if(kids.length)h+=`<ul>${kids.map(x=>node([...pre,x.i],x.C,depth+1)).join('')}</ul>`;
     return h+'</li>'};
+  const treeStop=p=>{for(let k=1;k<=4;k++){const pre=p.slice(0,k);if(!O.some(o=>o.s>=T&&pre.every((v,i)=>o.p[i]===v)))return k}return 0};
+  const RR=retryRules(O,T,L,nm),tTree=retryTime(O,T,L,treeStop),m=v=>`${v.toFixed(1)}分`;
   return`<details class="panel" data-retry${state.ui.retryOpen===false?'':' open'}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
     <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
-    <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）。1回で届く確率 ${Math.round(need/N*100)}%、平均 ${(N/need).toFixed(1)} 回で届きます</span></div>
-    <ul class="rt-tree">${node([],O,0)}</ul>
-    <p class="note" style="margin:6px 0 0">「続行」の％は、そこまでの発動順のまま最後までいったときに目標に届く確率。「リトライ」の人がその番目で発動したら、もう目標には届きません。％が100%になった分かれ道は、あとは誰が来ても届きます。</p></details>`}
+    <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
+    <h3 style="margin:10px 0 4px">覚えるルール</h3>
+    ${RR.rules.length?`<ol class="rt-rules">${RR.rules.map(r=>`<li><b>${esc(r.t)}</b> <span class="muted">→ 目標まで平均 ${m(r.min)}</span></li>`).join('')}</ol>`:'<p class="muted" style="margin:0">リトライしても早くならないので、毎回最後まで遊ぶのがいちばんです。</p>'}
+    <p class="note" style="margin:4px 0 0">リトライなし（毎回最後まで）だと平均 ${m(RR.none)}、下の分かれ道をすべて使うと ${m(tTree)}。時間は「スキルが曲の中で均等な間隔で発動し、リトライ1回に${RETRY_SEC}秒」と仮定した目安です。</p>
+    <details style="margin-top:8px"><summary class="muted">すべての分かれ道を見る</summary><ul class="rt-tree" style="margin-top:6px">${node([],O,0)}</ul>
+    <p class="note" style="margin:6px 0 0">「続行」の％は、そこまでの発動順のまま最後までいったときに目標に届く確率。「リトライ」の人がその番目で発動したら、もう目標には届きません。100%になった分かれ道は、あとは誰が来ても届きます。</p></details></details>`}
 // 番目ごとの重みと、メンバー×番目の増えるスコア。スコア＝総合力×(基礎＋Σ スキル%×重み(番目, スキルの長さ))（haneoka の重み表）
 // 重みはスキルの長さ（5秒＋スナップの延長）で変わるので、メンバーごとの長さで計算した値を表にする（40-model.js の prep と同じ補間）
 function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const n=W.length,kf=song.kf||1;
@@ -810,7 +832,7 @@ function renderResult(){
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${R.obj!=='gkscore'?retryHtml(e)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
+  </div>${R.obj!=='gkscore'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
