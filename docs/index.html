@@ -768,8 +768,7 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     const kids=ok.filter(x=>x.hit<x.C.length&&k<3);
     if(kids.length)h+=`<ul>${kids.map(x=>node([...pre,x.i],x.C,depth+1)).join('')}</ul>`;
     return h+'</li>'};
-  const treeStop=p=>{for(let k=1;k<=4;k++){const pre=p.slice(0,k);if(!O.some(o=>o.s>=T&&pre.every((v,i)=>o.p[i]===v)))return k}return 0};
-  const RR=retryRules(O,T,L,nm),tTree=retryTime(O,T,L,treeStop),m=v=>`${v.toFixed(1)}分`;
+  const RR=retryRules(O,T,L,nm),m=v=>`${v.toFixed(1)}分`;
   return`<details class="panel" data-retry${state.ui.retryOpen===false?'':' open'}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
     <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
     <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
@@ -777,9 +776,9 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     ${RR.rules.length?`<div class="tbl"><table><thead><tr><th>#</th><th>ルール（発動した順に確かめる）</th><th class="num">完走したときのスコア（最低〜最高）</th><th class="num">目標に届く</th><th class="num">目標まで平均</th></tr></thead><tbody>
       ${RR.rules.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.t)}</b></td><td class="num">${r.min<T?`<span style="color:var(--muted)">${fmt(r.min)}</span>`:fmt(r.min)}〜${fmt(r.max)}</td><td class="num">${r.hit}/${r.n}（${Math.round(r.hit/r.n*100)}%）</td><td class="num">${m(r.time)}</td></tr>`).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">リトライしても早くならないので、毎回最後まで遊ぶのがいちばんです。</p>'}
-    <p class="note" style="margin:4px 0 0">「完走したときのスコア」は、その行までのルールをすべて満たして最後まで遊んだときに出るスコアの幅（オールパーフェクト前提）。途中の行は、そこまでのルールだけ守ったときの値です。全部のルールを守って完走すれば、必ず目標以上になります（オールパーフェクト前提）。発動した順に上から確かめてください。下の分かれ道をすべて使うと平均 ${m(tTree)}。時間は「スキルが曲の中で均等な間隔で発動し、リトライ1回に${RETRY_SEC}秒」と仮定した目安です。</p>
+    <p class="note" style="margin:4px 0 0">全部守って完走すれば必ず目標以上（オールパーフェクト前提）。時間はスキルが均等に発動・リトライ${RETRY_SEC}秒とした目安。</p>
     <details style="margin-top:8px"><summary class="muted">すべての分かれ道を見る</summary><ul class="rt-tree" style="margin-top:6px">${node([],O,0)}</ul>
-    <p class="note" style="margin:6px 0 0">「続行」の％は、そこまでの発動順のまま最後までいったときに目標に届く確率。「リトライ」の人がその番目で発動したら、もう目標には届きません。100%になった分かれ道は、あとは誰が来ても届きます。</p></details></details>`}
+    <p class="note" style="margin:6px 0 0">％は、そのまま最後までいったときに目標に届く確率。</p></details></details>`}
 // 番目ごとの重みと、メンバー×番目の増えるスコア。スコア＝総合力×(基礎＋Σ スキル%×重み(番目, スキルの長さ))（haneoka の重み表）
 // 重みはスキルの長さ（5秒＋スナップの延長）で変わるので、メンバーごとの長さで計算した値を表にする（40-model.js の prep と同じ補間）
 function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const n=W.length,kf=song.kf||1;
