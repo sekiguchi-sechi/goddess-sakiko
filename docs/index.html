@@ -775,7 +775,6 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
     <h3 style="margin:10px 0 4px">覚えるルール</h3>
     ${RR.rules.length?`<div class="tbl"><table><thead><tr><th>#</th><th>ルール（発動した順に確かめる）</th><th class="num">完走したときのスコア（最低〜最高）</th><th class="num">目標に届く</th><th class="num">目標まで平均</th></tr></thead><tbody>
-      <tr><td></td><td class="muted">ルールなし（毎回最後まで）</td><td class="num">${fmt(RR.none.min)}〜${fmt(RR.none.max)}</td><td class="num">${RR.none.hit}/${RR.none.n}（${Math.round(RR.none.hit/RR.none.n*100)}%）</td><td class="num">${m(RR.none.time)}</td></tr>
       ${RR.rules.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.t)}</b></td><td class="num">${r.min<T?`<span style="color:var(--muted)">${fmt(r.min)}</span>`:fmt(r.min)}〜${fmt(r.max)}</td><td class="num">${r.hit}/${r.n}（${Math.round(r.hit/r.n*100)}%）</td><td class="num">${m(r.time)}</td></tr>`).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">リトライしても早くならないので、毎回最後まで遊ぶのがいちばんです。</p>'}
     <p class="note" style="margin:4px 0 0">「完走したときのスコア」は、その行までのルールをすべて満たして最後まで遊んだときに出るスコアの幅（オールパーフェクト前提）。途中の行は、そこまでのルールだけ守ったときの値です。全部のルールを守って完走すれば、必ず目標以上になります（オールパーフェクト前提）。発動した順に上から確かめてください。下の分かれ道をすべて使うと平均 ${m(tTree)}。時間は「スキルが曲の中で均等な間隔で発動し、リトライ1回に${RETRY_SEC}秒」と仮定した目安です。</p>
