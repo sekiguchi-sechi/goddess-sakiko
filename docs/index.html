@@ -451,7 +451,7 @@ function ev(t){
       if(s.gs!=null){const k1=s.gs+'|'+((s.band&&s.band===m.band)?1:0);keys.push([G.v[k1]?k1:s.gs+'|',s.lb|0])}}
     // JUST区間: JUST率α＝(自分のJUST率)^0.88＋0.15×判定幅スナップ枚数（バンド不一致は半分）。理論値（全JUST）とPERFECT値×0.92をαで混ぜる。
     // 係数は haneoka.org の激奏スコア（JUST率0/50/100%）と実戦20回から（README「撃奏の較正」）
-    let nj=0;for(let i=0;i<5;i++){const m=M[t.m[i]],s=S[t.s[i]];if(s.gkJudgeAll)nj+=(s.band&&s.band===m.band)?1:0.5}
+    let nj=0,njc=0;for(let i=0;i<5;i++){const m=M[t.m[i]],s=S[t.s[i]];if(s.gkJudgeAll){nj+=(s.band&&s.band===m.band)?1:0.5;njc++}}
     const al=Math.min(1,Math.pow(st.gk2A0??(st.gkJust??20)/100,st.gk2G??0.88)+(st.gk2A1??0.15)*nj),JP=st.gk2JP??0.92;
     const sec=(r,x,f)=>{const th=x[0]+x[1]*f;return r[0]===3&&x.length>3?al*th+(1-al)*JP*(x[2]+x[3]*f):th};
     const at=rk=>{let base=G.b,inc=0;G.r.forEach((r,i)=>{const f=r[3][rk[i]-1]/r[3][0],k=KK[r[0]]??1;base+=sec(r,[r[1],r[2],r[4],r[5]],f)*k-(r[1]+r[2])});
@@ -459,7 +459,7 @@ function ev(t){
       return (P/300000*(base+inc)+P*yb*G.W*(base/G.b))*(CTX.song.gkf||1)};
     const win=at([1,1,1]),lose=at([2,2,2]);
     const mk={};for(let i=0;i<5;i++){const k=M[t.m[i]].gekiKind;if(k)mk[k]=(mk[k]||0)+1}
-    return{P,Sk,GB,free,gkMul:win/free,gkW,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,slots,gk2:true,mk,nj}}
+    return{P,Sk,GB,free,gkMul:win/free,gkW,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,slots,gk2:true,mk,nj,njc}}
   const ord=A&&t.detail?orders120(A,P*CTX.kf,CTX.rt.b):null;
   return{P,Sk,GB,free,gkMul,gkW,gkLose:free*gkLoseMul,score:free*gkMul,sd,lo:(free-z*sd)*gkMul,hi:(free+z*sd)*gkMul,max:mx||free,ord,pt,it,slots};
 }
@@ -490,7 +490,7 @@ function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return
   let free=K*P*(1+Sk);
   if(gk){const {G,KK,LV,a0,a1,JP,gkf}=F.g2;
     let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
-    let nj=0;for(let i=0;i<5;i++)if(S[t.s[i]].gkJudgeAll)nj+=F.nj[J[i]];
+    let nj=0,njc=0;for(let i=0;i<5;i++)if(S[t.s[i]].gkJudgeAll){nj+=F.nj[J[i]];njc++}
     const al=Math.min(1,a0+a1*nj);
     const SC=F.g2.sec,nr=SC.length,mvv=F.mv,svv=F.sv;
     // 区間の基礎分は JUST率α（判定幅スナップの枚数で決まる）と順位だけで決まるので、αごとに1回だけ計算して使い回す
@@ -503,7 +503,7 @@ function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return
       return (P/300000*(base+inc)+P*yb*G.W*(base/G.b))*gkf};
     const win=at(1),lose=at(2);
     const mk={};for(let i=0;i<5;i++){const k=M[t.m[i]].gekiKind;if(k)mk[k]=(mk[k]||0)+1}
-    return{P,Sk,free,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,gk2:true,mk,nj}}
+    return{P,Sk,free,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,gk2:true,mk,nj,njc}}
   let sd=0,mx=0;
   if(CTX.sw&&!CTX.rt){const w=CTX.sw,W=w.reduce((a,b)=>a+b,0),wb=W/5;let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
     let vy=0;for(let i=0;i<5;i++)vy+=(ys[i]-yb)**2;vy/=4;const vw=w.reduce((a,x)=>a+(x-wb)**2,0);
@@ -637,10 +637,12 @@ function solve(song,obj){
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
     let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score;
     // 区間の種類が混ざった曲（全部入り）でも、JUST区間があれば判定幅スナップを最低1枚入れる（無いと実戦でJUSTが取りにくい）
-    if(obj==='gkscore'&&state.settings.gkReq!==false){const ty=new Set(song.gkTypes||[]),st=state.settings;if(ty.size===1){const k=[...ty][0];
-      const need=({JUST:st.gkNeedJ??4,COMBO:st.gkNeedC??4,LUCK:st.gkNeedL??2})[k]||0,nj=k==='JUST'?(st.gkNeedJudge??2):0;
-      f=e=>{const sh=Math.max(0,need-((e.mk||{})[k]||0))+Math.max(0,nj-(e.nj||0));return e.score*(sh?0.5-0.05*sh:1)}}
-      else if(ty.has('JUST')){const nj=st.gkNeedJudgeMix??1;f=e=>{const sh=Math.max(0,nj-(e.nj||0));return e.score*(sh?0.5-0.05*sh:1)}}}
+    // 判定幅スナップの枚数を指定したとき（gkJudgeN）は、JUST区間のある曲でその枚数ちょうどの編成を探す（手持ちが足りなければ近い枚数）
+    if(obj==='gkscore'){const ty=new Set(song.gkTypes||[]),st=state.settings,JN=st.gkJudgeN,fixJ=ty.has('JUST')&&typeof JN==='number';
+      let k=null,need=0,nj=0;
+      if(st.gkReq!==false){if(ty.size===1){k=[...ty][0];need=({JUST:st.gkNeedJ??4,COMBO:st.gkNeedC??4,LUCK:st.gkNeedL??2})[k]||0;nj=k==='JUST'?(st.gkNeedJudge??2):0}
+        else if(ty.has('JUST'))nj=st.gkNeedJudgeMix??1}
+      if(fixJ||need||nj)f=e=>{const sj=fixJ?Math.abs((e.njc||0)-JN):Math.max(0,nj-(e.nj||0)),sh=Math.max(0,need-((k&&(e.mk||{})[k])||0))+sj;return e.score*(sh?0.5-0.05*sh:1)}}
     const t=optimizeF(f);return{best:pack(t),frontier:[],chal,songId:song.id};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
@@ -718,7 +720,8 @@ function viewOpt(){
       ${useLb?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
       ${useMult?`<label class="f">チャレンジ消費倍率<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>`:''}
       <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
-      ${o==='gkscore'?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>`:''}
+      ${o==='gkscore'?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
+      <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（まぶたをおろして・ちえりが褒めます！！・星を愛した少女の嘘）を何枚入れるか。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`:''}
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
     <p class="note">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${o==='gkscore'?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
@@ -1122,7 +1125,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
       <label class="f">タイプリンク：スナップ覚醒1段階あたり %<input type="number" data-set="typeLink" value="${st.typeLink}" step="0.5"></label>
       <label class="f">タイプボーナス（楽曲タイプ一致）：メンバー覚醒1段階あたり %<input type="number" data-set="musicType" value="${st.musicType}" step="0.5"></label>
       <label class="f">得意楽曲：メンバー覚醒1段階あたり %<input type="number" data-set="tokui" value="${st.tokui}" step="0.5"></label>
-      <label class="f"><input type="checkbox" data-set="gkReq" ${st.gkReq!==false?'checked':''}> 撃奏：勝てる編成の条件を必須にする（JUSTスキル4人＋判定幅スナップ2枚／COMBOスキル4人／LUCKスキル2人／区間が混ざった曲でJUST区間があれば判定幅スナップ1枚）</label>
+      <label class="f"><input type="checkbox" data-set="gkReq" ${st.gkReq!==false?'checked':''}> 撃奏：勝てる編成の条件を必須にする（JUSTスキル4人＋判定幅スナップ2枚／COMBOスキル4人／LUCKスキル2人／区間が混ざった曲でJUST区間があれば判定幅スナップ1枚。判定幅スナップの枚数は最適化画面で指定するとそちらが優先）</label>
       <label class="f">ランク判定に使うスキル順の悪いケース（ばらつきの何倍下か）<input type="number" data-set="orderZ" value="${st.orderZ??1.28}" step="0.1"></label>
       <label class="f">T.G.W CARD 全パラメータ %<input type="number" data-set="vip" value="${st.vip}" step="1"></label>
       <label class="f">探索の試行回数<input type="number" data-set="restarts" value="${st.restarts}" min="1"></label>
@@ -1237,6 +1240,7 @@ document.addEventListener('change',e=>{
   if(el.id==='margin'){state.settings.margin=+el.value||0;save();return}
   if(el.id==='retryTop'){state.settings.retryTop=Math.min(50,Math.max(1,Math.round(+el.value)||10));save();const r=document.getElementById('result');if(r&&lastResult)r.innerHTML=renderResult();return}
   if(el.id==='gkJust'){state.settings.gkJust=Math.max(0,Math.min(100,+el.value||0));save();return}
+  if(el.id==='gkJudgeN'){state.settings.gkJudgeN=el.value===''?null:+el.value;save();return}
   if(el.id==='evName'){state.event.name=el.value;save();return}
   if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
