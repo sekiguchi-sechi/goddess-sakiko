@@ -1113,11 +1113,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
     <h3 style="margin:6px 0 0">キャラクターランク</h3>
     ${BAND_NAMES.map(b=>`<div class="row">${BANDS[b].map(c=>`<label class="f">${esc(c)}<input type="number" data-set="charaRankLv.${c}" value="${st.charaRankLv?.[c]??1}" step="1" min="1" style="width:64px"></label>`).join('')}</div>`).join('')}
   </section>
-  <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section>
-  <section class="panel stack"><h2>このツールについて</h2>
-    <p class="note">非公式のファンツールです。株式会社ブシロードおよび「BanG Dream! Our Notes」公式とは関係ありません。</p>
-    <p class="note">Team-building algorithm from Haneoka — <a href="https://haneoka.org" target="_blank" rel="noopener">https://haneoka.org</a><br>曲ごとのスコア補正（スキル重み表・撃奏の補正）は、haneoka の編成シミュレーターと計算エンジンの結果をもとにしています。</p>
-  </section></div>`;
+  <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section></div>`;
 }
 function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
   return`<div class="stack">
