@@ -772,6 +772,18 @@ function guidePanel(){
     </ol>
     <div class="row">${nm?'':`<button class="btn small primary" data-act="goMembers">メンバーを登録する</button>`}${PUBLIC?'':'<button class="btn small" data-act="useAuthor">作者の手持ちで試す</button>'}</div>
   </details>`}
+// 撃奏の入力: アリーナはルール（撃奏の種類・タイプ）を先に出し、選んだ種類に関係する項目だけを出す。
+// 撃奏ライブは曲の撃奏区間にある種類の項目だけ（JUST→JUST率・判定幅スナップ、COMBO→COMBO数、LUCK→LUCK値）
+function gkInputs(song,o,part){const st=state.settings,REQ=[['','指定なし'],['max','最高を必須'],['second','2番目以上を必須']];
+  if(part==='rule'){if(o!=='arena'||!song?.band)return'';const R=arenaRule(song.band);
+    return`<label class="f" title="撃奏アリーナでは、楽曲の撃奏区間の種類がバンドごとのルールに統一されます（毎日4:00に切り替わり）。アリーナTOPの楽曲情報で確認してください">撃奏の種類（${esc(song.band)}）<select id="arenaGk">${opts(['COMBO','LUCK','JUST'],R.gk)}</select></label>
+      <label class="f" title="撃奏アリーナでは、楽曲のタイプがバンドごとのルールに統一されます（開催中のイベントに合わせて切り替わり）">楽曲のタイプ（${esc(song.band)}）<select id="arenaType">${opts([['all','ALL（全タイプ一致）'],...TYPES.map(t=>[t,t]),['','楽曲のまま（'+(song.type||'')+'）']],R.type)}</select></label>`}
+  const kinds=new Set(o==='arena'&&song?.band?[arenaRule(song.band).gk]:(song?.gkTypes||[]));let h='';
+  if(kinds.has('JUST'))h+=`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
+      <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（まぶたをおろして・ちえりが褒めます！！・星を愛した少女の嘘）を何枚入れるか。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`;
+  if(kinds.has('COMBO'))h+=`<label class="f" title="COMBO 撃奏は区間内の COMBO 数で順位が決まります。メンバーの「撃奏COMBO獲得量UP」の合計が、手持ちで出せる最高（または2番目以上）の編成の中からスコア最大を選びます。COMBO 区間の無い曲では使いません">COMBO数<select id="gkComboReq">${opts(REQ,st.gkComboReq??(st.gkComboMax?'max':''))}</select></label>`;
+  if(kinds.has('LUCK'))h+=`<label class="f" title="LUCK 撃奏は区間内の LUCK pt で順位が決まります。LUCK値＝LUCK のメンバーの撃奏スキルと、抽選に効く LUCK スナップが LUCK 区間に足すスコア（LUCK pt の代わり。スコアUP 系のスナップは含めません）。最高（または最高から1%以上下がる中で一番高い値以上）の編成の中からスコア最大を選びます。LUCK 区間の無い曲では使いません">LUCK値<select id="gkLuckReq">${opts(REQ,st.gkLuckReq||'')}</select></label>`;
+  return h}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
   // 目的に関係する入力だけを出す（楽曲: チャレンジスコア以外、チャレンジ楽曲: 合計とチャレンジスコア、ブースト: 合計のみ、消費倍率: 合計とチャレンジスコア）
@@ -781,16 +793,12 @@ function viewOpt(){
     <div class="row">
       <label class="f">目的<select id="obj">${opts(OBJECTIVES.map(o=>[o.id,o.label]),state.ui.obj)}</select></label>
       ${useSong?`<label class="f">楽曲（入力で検索・空欄で一覧）${comboHtml('songSel',song?.name||'')}</label>`:''}
+      ${isGk(o)?gkInputs(song,o,'rule'):''}
       ${useCh?`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||song)?.name||''))}</label>`:''}
       ${useLb?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
       ${useMult?`<label class="f">チャレンジ消費倍率<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>`:''}
       <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
-      ${isGk(o)?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
-      <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（まぶたをおろして・ちえりが褒めます！！・星を愛した少女の嘘）を何枚入れるか。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`:''}
-      ${isGk(o)?(()=>{const st=state.settings,REQ=[['','指定なし'],['max','最高を必須'],['second','2番目以上を必須']];return`<label class="f" title="COMBO 撃奏は区間内の COMBO 数で順位が決まります。メンバーの「撃奏COMBO獲得量UP」の合計が、手持ちで出せる最高（または2番目以上）の編成の中からスコア最大を選びます。COMBO 区間の無い曲では使いません">COMBO数<select id="gkComboReq">${opts(REQ,st.gkComboReq??(st.gkComboMax?'max':''))}</select></label>
-      <label class="f" title="LUCK 撃奏は区間内の LUCK pt で順位が決まります。LUCK値＝LUCK のメンバーの撃奏スキルと、抽選に効く LUCK スナップが LUCK 区間に足すスコア（LUCK pt の代わり。スコアUP 系のスナップは含めません）。最高（または最高から1%以上下がる中で一番高い値以上）の編成の中からスコア最大を選びます。LUCK 区間の無い曲では使いません">LUCK値<select id="gkLuckReq">${opts(REQ,st.gkLuckReq||'')}</select></label>`})():''}
-      ${o==='arena'&&song?.band?(()=>{const R=arenaRule(song.band);return`<label class="f" title="撃奏アリーナでは、楽曲の撃奏区間の種類がバンドごとのルールに統一されます（毎日4:00に切り替わり）。アリーナTOPの楽曲情報で確認してください">撃奏の種類（${esc(song.band)}）<select id="arenaGk">${opts(['COMBO','LUCK','JUST'],R.gk)}</select></label>
-      <label class="f" title="撃奏アリーナでは、楽曲のタイプがバンドごとのルールに統一されます（開催中のイベントに合わせて切り替わり）">楽曲のタイプ（${esc(song.band)}）<select id="arenaType">${opts([['all','ALL（全タイプ一致）'],...TYPES.map(t=>[t,t]),['','楽曲のまま（'+(song.type||'')+'）']],R.type)}</select></label>`})():''}
+      ${isGk(o)?gkInputs(song,o,'req'):''}
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
     <p class="note">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
@@ -1316,7 +1324,7 @@ document.addEventListener('change',e=>{
   if(el.id==='gkJust'){state.settings.gkJust=Math.max(0,Math.min(100,+el.value||0));save();return}
   if(el.id==='gkJudgeN'){state.settings.gkJudgeN=el.value===''?null:+el.value;save();return}
   if(el.id==='gkComboReq'||el.id==='gkLuckReq'){state.settings[el.id]=el.value;if(el.id==='gkComboReq')delete state.settings.gkComboMax;save();return}
-  if(el.id==='arenaGk'||el.id==='arenaType'){const b=curSong()?.band;if(b){const r=(state.settings.arenaRule??={})[b]??={};r[el.id==='arenaGk'?'gk':'type']=el.value;save()}return}
+  if(el.id==='arenaGk'||el.id==='arenaType'){const b=curSong()?.band;if(b){const r=(state.settings.arenaRule??={})[b]??={};r[el.id==='arenaGk'?'gk':'type']=el.value;save();if(el.id==='arenaGk')render()}return}
   if(el.id==='evName'){state.event.name=el.value;save();return}
   if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
