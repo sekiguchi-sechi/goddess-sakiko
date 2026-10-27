@@ -175,7 +175,11 @@ const OBJECTIVES=[
   {id:'itemTotal',label:'イベントバッジ最大（フリー＋チャレンジ）'},
   {id:'chscore',label:'チャレンジライブ：スコア最大（ランキング用）'},
   {id:'gkscore',label:'撃奏ライブ：自分のスコア最大'},
+  // 撃奏アリーナ（2026-10-28〜）: 撃奏ライブと同じ計算で、メンバーは楽曲のバンドの5人だけ（ゲームの文言「楽曲に設定されているバンドで編成する必要があります」）。
+  // 適正・アリーナのイベントボーナス・サポートアイテムはマスターの中身が配信されてから入れる
+  {id:'arena',label:'撃奏アリーナ：自分のスコア最大（楽曲のバンドのみ）'},
 ];
+const isGk=o=>o==='gkscore'||o==='arena';
 const uid=()=>Math.random().toString(36).slice(2,9);
 const fmt=n=>Math.round(n).toLocaleString('ja-JP');
 // 手持ちの読み込み・書き出しボタン（メンバー・スナップ・データの各タブで共通）
@@ -357,11 +361,11 @@ const lastLE=(t,k)=>{let v=0;for(const[a,b]of t)if(a<=k)v=b;return v};
 function rankBonus(chara){const R=state.settings.charaRankLv||{};const tot=CHARAS.reduce((a,c)=>a+(+R[c]||1),0);
   return 3*(lastLE(CAT.curves.crank,+R[chara]||1)+lastLE(CAT.curves.ctotal,tot))}
 // ch=true のときだけイベントのパラメータボーナス（総合力アップ）を効かせる。公式ヘルプ「パラメータボーナスはチャレンジライブのみで発動」
-function prep(song,ch,gkMode){
+function prep(song,ch,gkMode,bandOnly){
   // チャレンジライブでは課題楽曲のタイプがイベントのタイプになる（ゲーム内表示で確認。微笑みの爆弾=紫苑→山吹扱い）
   const stype=(ch&&state.event?.type)?state.event.type:song.type;
   const st=state.settings, TL=st.typeLink/100, MT=st.musicType/100, TG=(st.tokui||0)/100, VIP=(st.vip||0)/100;
-  M=state.members.filter(m=>!m.excl&&m.power>0).map(m=>{
+  M=state.members.filter(m=>!m.excl&&m.power>0&&(!bandOnly||CHARA_BAND[m.chara]===bandOnly)).map(m=>{
     const band=CHARA_BAND[m.chara]||'';const c={...m,band};const ev=evBonus(c,'member');
     // パラメータ別の比率（P/T/V未入力なら1/3ずつ）。リーダースキルは単一パラメータ対象が多い
     const sum=(m.pP||0)+(m.pT||0)+(m.pV||0);
@@ -627,18 +631,19 @@ function solve(song,obj){
   if(CHAL_CACHE&&ck&&(obj==='ptTotal'||obj==='itemTotal'))CHAL_CACHE[ck]=chal;
   // チャレンジ編成を探したかキャッシュから取ったかで乱数の進み方が変わらないよう、本探索は同じ種からやり直す（全曲比較と最適化タブで同じ編成になる）
   if(obj==='ptTotal'||obj==='itemTotal')seedRnd(SEED0);
-  if(obj==='gkscore'&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
-  prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',obj==='gkscore');CTX.vpc=chal?chal.vpc:0;CTX.wantMax=obj==='maxscore';
-  if(M.length<5)return{error:'メンバーが5人未満です（除外中を含めて確認してください）。'};
+  if(isGk(obj)&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
+  if(obj==='arena'&&!song.band)return{error:'この曲にはバンドが設定されていないので、撃奏アリーナの編成を組めません。'};
+  prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',isGk(obj),obj==='arena'?song.band:'');CTX.vpc=chal?chal.vpc:0;CTX.wantMax=obj==='maxscore';
+  if(M.length<5)return{error:obj==='arena'?`撃奏アリーナは楽曲のバンド（${song.band}）のメンバーだけで編成します。${song.band}のメンバーが5人未満です（除外中を含めて確認してください）。`:'メンバーが5人未満です（除外中を含めて確認してください）。'};
   if(state.settings.uniqueChara&&new Set(M.map(m=>m.chara)).size<5)return{error:'キャラ重複不可の設定で、異なるキャラが5人そろいません。'};
   const pack=t=>{const e=ev({...t,detail:true});const rank=rankOf(e.lo,song);return{t,e,rank,val:value(obj,e,rank)}};
-  if(obj==='score'||obj==='maxscore'||obj==='chscore'||obj==='gkscore'||obj==='power'){
+  if(obj==='score'||obj==='maxscore'||obj==='chscore'||isGk(obj)||obj==='power'){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
     let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score;
     // 区間の種類が混ざった曲（全部入り）でも、JUST区間があれば判定幅スナップを最低1枚入れる（無いと実戦でJUSTが取りにくい）
     // 判定幅スナップの枚数を指定したとき（gkJudgeN）は、JUST区間のある曲でその枚数ちょうどの編成を探す（手持ちが足りなければ近い枚数）
-    if(obj==='gkscore'){const ty=new Set(song.gkTypes||[]),st=state.settings,JN=st.gkJudgeN,fixJ=ty.has('JUST')&&typeof JN==='number';
+    if(isGk(obj)){const ty=new Set(song.gkTypes||[]),st=state.settings,JN=st.gkJudgeN,fixJ=ty.has('JUST')&&typeof JN==='number';
       let k=null,need=0,nj=0;
       if(st.gkReq!==false){if(ty.size===1){k=[...ty][0];need=({JUST:st.gkNeedJ??4,COMBO:st.gkNeedC??4,LUCK:st.gkNeedL??2})[k]||0;nj=k==='JUST'?(st.gkNeedJudge??2):0}
         else if(ty.has('JUST'))nj=st.gkNeedJudgeMix??1}
@@ -720,11 +725,11 @@ function viewOpt(){
       ${useLb?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
       ${useMult?`<label class="f">チャレンジ消費倍率<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>`:''}
       <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
-      ${o==='gkscore'?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
+      ${isGk(o)?`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
       <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（まぶたをおろして・ちえりが褒めます！！・星を愛した少女の嘘）を何枚入れるか。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`:''}
       <button class="btn primary" id="run">最適編成を計算</button>
     </div>
-    <p class="note">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${o==='gkscore'?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
+    <p class="note">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
   </section>
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   <div id="tools">${toolsHtml()}</div>
@@ -850,10 +855,10 @@ function renderResult(){
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
-    <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${R.obj==='gkscore'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
-    ${R.obj==='gkscore'?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
+    <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${isGk(R.obj)?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
+    ${isGk(R.obj)?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${R.obj!=='gkscore'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
+  </div>${!isGk(R.obj)?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
@@ -864,9 +869,9 @@ const TOOL_FAST={restarts:16,minRestarts:8,stopHits:4};
 const PLAY_OVERHEAD=40; // 1回あたりの曲以外の時間（選曲・ロード・リザルト）の目安・秒
 function withFast(fn){const st=state.settings,keep={};for(const k in TOOL_FAST){keep[k]=st[k];st[k]=TOOL_FAST[k]}
   try{return fn()}finally{for(const k in keep){if(keep[k]===undefined)delete st[k];else st[k]=keep[k]}}}
-const objUnit=o=>({ptTotal:'pt / 回',itemTotal:'バッジ / 回',score:'推定スコア',maxscore:'最高スコア',chscore:'推定スコア',gkscore:'推定スコア'})[o]||'値';
+const objUnit=o=>({ptTotal:'pt / 回',itemTotal:'バッジ / 回',score:'推定スコア',maxscore:'最高スコア',chscore:'推定スコア',gkscore:'推定スコア',arena:'推定スコア'})[o]||'値';
 const perMin=o=>o==='ptTotal'||o==='itemTotal';
-const valCol=o=>o!=='score'&&o!=='chscore'&&o!=='gkscore'; // 目的の値が推定スコアそのものなら列を重ねない
+const valCol=o=>o!=='score'&&o!=='chscore'&&!isGk(o); // 目的の値が推定スコアそのものなら列を重ねない
 function toolsHtml(){
   const busy=toolOut&&toolOut.done<toolOut.total;
   const head=`<div class="row"><button class="btn small" data-act="growth"${busy?' disabled':''}>育成の優先度を調べる</button>
@@ -913,7 +918,7 @@ function startCompare(){
   const id=++toolRun,obj=state.ui.cmpObj||state.ui.obj||'ptTotal';
   // チャレンジのスコアは課題楽曲（chSong）で計算されるので、曲ごとに課題楽曲を差し替えて比べる。対象はイベントの課題曲（無ければ全曲）
   const chNames=state.event?.chSongs||[];
-  const list=state.songs.filter(s=>obj==='gkscore'?s.gkTypes?.length:obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
+  const list=state.songs.filter(s=>isGk(obj)?s.gkTypes?.length&&(obj!=='arena'||s.band):obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
   cmpOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintCmp();
   const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
     let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
@@ -933,7 +938,7 @@ function growthCandidates(base){
     if(r.sl<5&&c.live[r.sl]>c.live[r.sl-1])out.push({k:'m',cid,card:c.title,up:`スキルLv ${r.sl}→${r.sl+1}（${c.live[r.sl-1]}%→${c.live[r.sl]}%）`,f:x=>{x.sl++}});
     if(r.tr<c.lim.length)out.push({k:'m',cid,card:c.title,up:`特訓 ${r.tr}→${r.tr+1}（Lv上限 ${c.lim[r.tr]} まで上げる）`,f:x=>{x.tr++;x.lv=c.lim[x.tr-1]}});
     else if(r.lv<c.lim[r.tr-1])out.push({k:'m',cid,card:c.title,up:`Lv ${r.lv}→${c.lim[r.tr-1]}`,f:x=>{x.lv=c.lim[x.tr-1]}});
-    if(state.ui.obj==='gkscore'&&(r.gl||1)<5)out.push({k:'m',cid,card:c.title,up:`撃奏Lv ${r.gl||1}→${(r.gl||1)+1}`,f:x=>{x.gl=(x.gl||1)+1}})}
+    if(isGk(state.ui.obj)&&(r.gl||1)<5)out.push({k:'m',cid,card:c.title,up:`撃奏Lv ${r.gl||1}→${(r.gl||1)+1}`,f:x=>{x.gl=(x.gl||1)+1}})}
   for(const cid of new Set([...inS,...evS,...ss])){const c=CSN[cid],r=R.s[cid];if(!c||!r?.own)continue;
     if(r.rk<c.rk.length)out.push({k:'s',cid,card:c.title,up:`上限解放 ${r.rk}→${r.rk+1}（Lv上限 ${c.rk[r.rk][0]} まで上げる）`,f:x=>{x.rk++;x.lv=c.rk[x.rk-1][0]}});
     else if(r.lv<c.rk[r.rk-1][0])out.push({k:'s',cid,card:c.title,up:`Lv ${r.lv}→${c.rk[r.rk-1][0]}`,f:x=>{x.lv=c.rk[x.rk-1][0]}})}
