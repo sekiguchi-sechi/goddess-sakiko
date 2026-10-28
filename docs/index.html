@@ -723,7 +723,10 @@ function solve(song,obj){
       if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
         if(lr==='second'){const v2=evq(optimizeF(e=>e.lk<lkMax*0.99?e.lk:-1e18)).lk;if(v2>0&&v2<lkMax)lkThr=v2}
         const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}}
-    const t=optimizeF(f);return{best:pack(t),frontier:[],chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
+    const t=optimizeF(f);
+    // LUCK値は指定なしでも表示する（LUCK 区間のある撃奏の曲）。手持ちの最高は探索のあとに求める（探索の乱数の順を変えない）
+    if(isGk(obj)&&lkMax==null&&(song.gkTypes||[]).includes('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;CTX.needLk=false}
+    return{best:pack(t),frontier:[],chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
   const frontier=[];let topT=null;
