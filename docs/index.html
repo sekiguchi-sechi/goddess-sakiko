@@ -158,6 +158,29 @@ tr.rt-sure-first td{border-top:2px dashed var(--line)}
 .kpi .v .rr{font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
 
 .grow-up{font-size:12px;line-height:1.5;min-width:150px}
+nav.tabs .subtabs{flex-basis:100%;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 0 8px;border-top:1px solid var(--line)}
+nav.tabs .subtabs button{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;margin:0}
+nav.tabs .subtabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* スマホ: 編成表は横スクロールさせず、1枠1カードの縦並び（2026-10-30） */
+@media (max-width:640px){
+  table.team thead{display:none}
+  table.team,table.team tbody{display:block}
+  table.team tr{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  table.team tr:last-child{border-bottom:0}
+  table.team td{display:block;border:0;padding:0;white-space:normal;background:none!important;box-shadow:none!important}
+  table.team tr.best{background:var(--soft);box-shadow:inset 3px 0 0 var(--accent)}
+  table.team td.c-lead:empty{display:none}
+  table.team td.c-rar{font-size:11px;color:var(--muted)}
+  table.team td.c-band{font-size:12px;color:var(--muted)}
+  table.team td.c-name{flex-basis:100%;font-size:14px;font-weight:600;order:2}
+  table.team td.c-type{order:1}
+  table.team td.c-snap,table.team td.c-grow,table.team td.c-ord{flex-basis:100%;order:3;font-size:12.5px;text-align:left}
+  table.team td.c-snap::before{content:"スナップ ";color:var(--muted);font-size:11px}
+  table.team td.c-grow::before{content:"育成 ";color:var(--muted);font-size:11px}
+  table.team td.c-ord:empty{display:none}
+  table.team td.c-ord::before{content:"発動順 ";color:var(--muted);font-size:11px}
+  .grow-up{min-width:0}
+}
 </style>
 
 <header class="top">
@@ -827,13 +850,19 @@ function solve(song,obj,opt={}){
 }
 
 // ===== 描画 =====
-const TABS=PUBLIC?[['opt','最適化'],['ideal','理想編成'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['ideal','理想編成'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
+// タブは「グループ＋サブタブ」の2段（2026-10-30）。state.ui.tab はサブタブ（葉）の id のまま
+const TAB_GROUPS=[['opt','最適化',[['opt','今の手持ち'],['ideal','理想（育てたら）']]],['compare','全曲比較',[['compare','全曲比較']]],
+  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断']]],['roster','手持ち',[['members','メンバー'],['snaps','スナップ']]],
+  ['data','データ',PUBLIC?[['songs','楽曲'],['settings','保存・読み込み']]:[['songs','楽曲'],['event','イベント'],['settings','設定・データ']]]];
+const TABS=TAB_GROUPS.flatMap(g=>g[2]);
+const tabGroup=id=>TAB_GROUPS.find(g=>g[2].some(x=>x[0]===id))||TAB_GROUPS[0];
 let lastResult=null,shownIdx=null;
-function renderTabs(){
-  document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
+function renderTabs(){const cur=tabGroup(state.ui.tab);
+  document.getElementById('tabs').innerHTML=TAB_GROUPS.map(([g,l])=>`<button role="tab" aria-selected="${cur[0]===g}" data-grp="${g}">${l}</button>`).join('')+
+    (cur[2].length>1?`<div class="subtabs" role="tablist">${cur[2].map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('')}</div>`:'');
 }
 // 編成表（レア・キャラ・バンド・カード名・タイプ・スナップ）
-function teamTable(rows,ideal){const ord=rows.some(r=>r.ord),gu=ideal?idealUps(ideal):null;return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${gu?'<th>育成（手持ち→最大）</th>':''}${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${gu?`<td class="grow-up">${gu(r)}</td>`:''}${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
+function teamTable(rows,ideal){const ord=rows.some(r=>r.ord),gu=ideal?idealUps(ideal):null;return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${gu?'<th>育成（手持ち→最大）</th>':''}${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td class="c-lead">${r.lead?'<b style="color:var(--accent)" title="リーダー">★</b>':''}</td><td class="c-rar">${esc(r.rarity)}</td><td class="c-chara"><b>${esc(r.chara)}</b></td><td class="c-band">${esc(r.band)}</td><td class="c-name">${esc(r.name)}</td><td class="c-type">${chip(r.type)}</td><td class="c-snap">${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${gu?`<td class="grow-up c-grow">${gu(r)}</td>`:''}${ord?`<td class="num c-ord">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
 const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,name:x.m.name,type:x.m.type,snap:x.s.none?'':x.s.name,snapType:x.s.type,mcid:x.m.cid,scid:x.s.none?null:x.s.cid});
 function chip(t){return t?`<span class="chip t-${esc(t)}">${esc(t)}</span>`:''}
 function opts(list,val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+list.map(x=>{const[v,l]=Array.isArray(x)?x:[x,x];return`<option value="${esc(v)}"${String(v)===String(val)?' selected':''}>${esc(l)}</option>`}).join('')}
@@ -1146,25 +1175,42 @@ function growUps(k,cid){const R=state.roster[k][cid],out=[];if(!R?.own)return ou
 function growBaseOne(T,t){const b=growSolve(T[t]),v=b.best?.val||0,ups=[];
   if(v>0){const rel=growRel(T[t],b);for(const k of ['m','s'])for(const cid of rel[k])for(const u of growUps(k,cid)){const{f,...x}=u;ups.push(x)}}
   return{v,ups,cc:CHAL_CACHE}}
-function growAddBase(t,r){growOut.base[t]=r.v||0;
+function growAddBase(t,r){growOut.base[t]=r.v||0;if(growOut.mode==='gacha')return;
   for(const u of r.ups||[]){let row=growOut.rows.get(u.key);if(!row){const k=u.k,cid=u.cid;row={...u,card:(k==='m'?CM[cid]?.title:CSN[cid]?.title)||'',chara:k==='m'?CM[cid]?.chara||'':'',g:{}};growOut.rows.set(u.key,row)}growOut.jobs.push([u.key,t])}}
 // 候補1つ（key）を仮に育てて目的 t を計算し直した値。手持ちは元に戻す
 function growJob(T,key,t){const k=key[0],cid=key.slice(1,key.indexOf('|')),R=state.roster[k][cid];if(!R)return null;const keep=JSON.parse(JSON.stringify(R));
   try{const u=growUps(k,cid).find(x=>x.key===key);if(!u)return null;u.f(state.roster[k][cid]);materialize();return growSolve(T[t]).best?.val||0}
   catch(e){return null}finally{state.roster[k][cid]=keep;materialize()}}
-function startGrow(){
-  const id=++toolRun,T=growTargets();if(!T.length){growOut={err:'評価する目的がありません（重みがすべて「使わない」か、曲が選ばれていません）。'};paintGrow();return}
-  CHAL_CACHE={};growOut={T,base:[],rows:new Map(),jobs:[],done:0,total:T.length,phase:'base'};paintGrow();
+function startGrow(mode='grow'){
+  const id=++toolRun,T=growTargets();if(!T.length){growOut={mode,err:'評価する目的がありません（重みがすべて「使わない」か、曲が選ばれていません）。'};paintGrow();return}
+  CHAL_CACHE={};growOut={mode,gst:gachaSt(),T,base:[],rows:new Map(),jobs:[],done:0,total:T.length,phase:'base'};paintGrow();
   // 1) 各目的の元の値と、関係するカード → 2) 候補ごとに関係する目的だけ計算し直す
   const serial=()=>{let ti=0;const stepBase=()=>{if(id!==toolRun)return;growAddBase(ti,growBaseOne(T,ti));
-    ti++;growOut.done=ti;paintGrow();if(ti<T.length)setTimeout(stepBase,0);else{growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();setTimeout(stepJob,0)}};
+    ti++;growOut.done=ti;paintGrow();if(ti<T.length)setTimeout(stepBase,0);else{if(mode==='gacha')gachaAddJobs();growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();setTimeout(stepJob,0)}};
   const stepJob=()=>{if(id!==toolRun){CHAL_CACHE=null;return}
     const end=Math.min(growOut.jobs.length,growOut.done+4);
-    for(;growOut.done<end;growOut.done++){const [key,t]=growOut.jobs[growOut.done],v=growJob(T,key,t),b=growOut.base[t];if(v!=null&&b>0)growOut.rows.get(key).g[t]=v/b-1}
+    for(;growOut.done<end;growOut.done++){const [key,t]=growOut.jobs[growOut.done],v=growAny(T,key,t),b=growOut.base[t];if(v!=null&&b>0)growOut.rows.get(key).g[t]=v/b-1}
     if(growOut.done>=growOut.total){growOut.phase='done';CHAL_CACHE=null}paintGrow();if(growOut.done<growOut.total)setTimeout(stepJob,0)};
   setTimeout(stepBase,30)};
   // 並列で計算できれば Worker で（68-pool.js）
-  if(canPool())parGrow(id,T).then(ok=>{if(!ok&&id===toolRun)serial()});else serial()}
+  if(canPool())parGrow(id,T,mode).then(ok=>{if(!ok&&id===toolRun)serial()});else serial()}
+// ===== ガチャ判断（2026-10-30）: 未所持カードを1枚ずつ仮に手持ちへ入れて、育成と同じ目的で最適化し直す =====
+// 入れる状態（state.ui.gst）: got=引いたまま（Lv1・特訓1・覚醒1）／grown=覚醒以外を最大（1枚で届く所まで）／max=すべて最大（覚醒5・上限解放最大）
+const GACHA_ST={got:'引いたまま',grown:'覚醒以外を最大（1枚で届く所まで）',max:'すべて最大（重ねて覚醒5・上限解放最大）'};
+const gachaSt=()=>GACHA_ST[state.ui.gst]?state.ui.gst:'grown';
+function gachaRoster(k,c,st){if(k==='m'){const r=newMR(c),n=c.lim.length;if(st!=='got'){r.tr=n;r.lv=c.lim[n-1];r.sl=5;if(c.geki)r.gl=5}if(st==='max')r.rk=5;return r}
+  const r=newSR(c),n=c.rk.length;if(st==='grown')r.lv=c.rk[0][0];if(st==='max'){r.rk=n;r.lv=c.rk[n-1][0]}return r}
+// 候補: 未所持のカード。アリーナはそのバンドのメンバーだけ（スナップはどのバンドでも付けられる）
+function gachaAddJobs(){const T=growOut.T;
+  const add=(k,c)=>{const key='g'+k+c.id;let row=null;
+    T.forEach((t,i)=>{if(!(growOut.base[i]>0))return;if(k==='m'&&t.obj==='arena'&&c.band!==t.band)return;
+      if(!row){row={k,cid:c.id,key,card:c.title,chara:c.chara||'',band:c.band||'',rarity:c.rarity,g:{}};growOut.rows.set(key,row)}growOut.jobs.push([key,i])})};
+  for(const c of CAT.members)if(!state.roster.m[c.id]?.own)add('m',c);
+  for(const c of CAT.snaps)if(!state.roster.s[c.id]?.own)add('s',c)}
+function gachaJob(T,key,t){const k=key[1],cid=key.slice(2),c=(k==='m'?CM:CSN)[cid];if(!c)return null;const had=state.roster[k][cid];
+  try{state.roster[k][cid]=gachaRoster(k,c,gachaSt());materialize();return growSolve(T[t]).best?.val||0}
+  catch(e){return null}finally{if(had)state.roster[k][cid]=had;else delete state.roster[k][cid];materialize()}}
+const growAny=(T,key,t)=>key[0]==='g'?gachaJob(T,key,t):growJob(T,key,t);
 // 行ごとの伸び: グループごとの平均（関係しない目的は0）と、アリーナで一番伸びる目的
 // 計算できなかった目的（手持ちが足りないバンドのアリーナなど、元の値0）は平均に入れない
 function growScore(r){const T=growOut.T,w=growW(),grp={};T.forEach((t,i)=>{if(growOut.base[i]>0)(grp[t.grp]??=[]).push(r.g[i]||0)});
@@ -1173,7 +1219,7 @@ function growScore(r){const T=growOut.T,w=growW(),grp={};T.forEach((t,i)=>{if(gr
   let top=null;T.forEach((t,i)=>{if(t.grp==='ar'&&(r.g[i]||0)>(top?.v||0))top={v:r.g[i],t}});
   return{tot:sw?s/sw:0,avg,top}}
 const pct=x=>x==null?'—':`${x>=0?'+':''}${(x*100).toFixed(x>=0.1||x<=-0.1?1:2)}%`;
-function growHtml(){const G=growOut;if(!G)return'';if(G.err)return`<div class="panel muted">${esc(G.err)}</div>`;
+function growHtml(){const G=growOut;if(!G||(G.mode||'grow')!==(state.ui.tab==='gacha'?'gacha':'grow'))return'';if(G.mode==='gacha'&&!G.err)return gachaHtml();if(G.err)return`<div class="panel muted">${esc(G.err)}</div>`;
   const busy=G.phase!=='done',grps=[...new Set(G.T.map(t=>t.grp))],cat=state.ui.gcat||'';
   const prog=busy?`<p class="muted">${G.phase==='base'?'目的ごとの最適編成を計算中':'育てた場合を計算中'}… ${G.done} / ${G.total}</p>`:'';
   const rows=[...G.rows.values()].map(r=>({r,...growScore(r)})).filter(x=>x.tot>0.0002&&(!cat||x.r.cat===cat)).sort((a,b)=>b.tot-a.tot).slice(0,30);
@@ -1185,12 +1231,29 @@ function growHtml(){const G=growOut;if(!G)return'';if(G.err)return`<div class="p
     ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>育成</th><th class="num">総合</th>${grps.map(g=>`<th class="num">${GROW_GRP[g]}${g==='ar'?'（平均／最大）':''}</th>`).join('')}</tr></thead><tbody>
     ${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.r.card)}${x.r.chara?`<span class="muted">（${esc(x.r.chara)}）</span>`:''}</td><td>${esc(x.r.up)}${x.r.max?' <span class="pill">最大まで</span>':''}</td><td class="num"><b>${pct(x.tot)}</b></td>${grps.map(g=>`<td class="num">${pct(x.avg[g])}${g==='ar'&&x.top?` <span class="muted">／${esc(x.top.t.band)} ${x.top.t.kind} ${pct(x.top.v)}</span>`:''}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div>`:(busy?'':'<p class="muted">育てて伸びる候補は見つかりませんでした。</p>')}</section>`}
-function paintGrow(){const el=document.getElementById('grow');if(el)el.innerHTML=growHtml();const b=document.querySelector('[data-act="grow"]');if(b)b.disabled=!!(growOut&&!growOut.err&&growOut.phase!=='done')}
+function paintGrow(){const el=document.getElementById('grow');if(el)el.innerHTML=growHtml();const b=document.querySelector('[data-act="grow"],[data-act="gacha"]');if(b)b.disabled=!!(growOut&&!growOut.err&&growOut.phase!=='done')}
 function viewGrowth(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&&growOut.phase!=='done';
   const sel=g=>`<label class="f">${GROW_GRP[g]}<select id="gw-${g}">${opts([[2,'重視'],[1,'普通'],[0,'使わない']],w[g])}</select></label>`;
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">育成</h2>
-    <p class="note">遊ぶもの全体で、どのカードをどう育てると伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りを計算します。1〜2分ほどかかります。</p>
+    <p class="note">遊ぶもの全体で、どのカードをどう育てると伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りを計算します。並列で計算するので、多くは数秒〜十数秒で終わります。</p>
     <div class="row">${['ev','ar','gk'].map(sel).join('')}<button class="btn primary" data-act="grow"${busy?' disabled':''}>育成の優先度を計算</button></div></section>
+  <div id="grow">${growHtml()}</div></div>`}
+function gachaHtml(){const G=growOut,busy=G.phase!=='done',grps=[...new Set(G.T.map(t=>t.grp))],f=state.ui.gcf||{k:'',r:''};
+  const prog=busy?`<p class="muted">${G.phase==='base'?'目的ごとの最適編成を計算中':'未所持カードを入れた場合を計算中'}… ${G.done} / ${G.total}</p>`:'';
+  const rows=[...G.rows.values()].filter(r=>(!f.k||r.k===f.k)&&(!f.r||r.rarity===f.r)).map(r=>({r,...growScore(r)})).filter(x=>x.tot>0.0002).sort((a,b)=>b.tot-a.tot).slice(0,30);
+  const grp=(key,label,items)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(([v,l])=>`<button type="button" class="fchip${(f[key]||'')===v?' on':''}" data-gcf="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  return`<section class="panel stack"><h3 style="margin:0">引くと伸びるカード <span class="muted" style="font-size:13px;font-weight:500">（${esc(GACHA_ST[G.gst]||'')}で計算）</span></h3>${prog}
+    <p class="note">未所持のカードを1枚ずつ手持ちに入れて最適化し直したときの伸びです（イベントは pt、アリーナと撃奏ライブは推定スコア）。今のイベントのボーナス対象カードは、そのイベントの間だけの伸びも含みます。ガチャで引けるか・いつ引けるかは考えていません。</p>
+    <details><summary class="muted">計算した目的（${G.T.length}件）</summary><p class="note">${G.T.map((t,i)=>esc(t.label)+(G.base[i]>0||i>=G.base.length?'':'（計算できず）')).join('／')}</p></details>
+    <div class="fchips">${grp('k','種類',[['','すべて'],['m','メンバー'],['s','スナップ']])}${grp('r','レア',[['','すべて'],['SSR','SSR'],['BD','BD'],['SR','SR'],['R','R']])}</div>
+    ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>レア</th><th class="num">総合</th>${grps.map(g=>`<th class="num">${GROW_GRP[g]}${g==='ar'?'（平均／最大）':''}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.r.card)}<span class="muted">（${x.r.k==='m'?esc(x.r.chara):'スナップ'}${x.r.band?'・'+esc(x.r.band):''}）</span></td><td>${esc(x.r.rarity)}</td><td class="num"><b>${pct(x.tot)}</b></td>${grps.map(g=>`<td class="num">${pct(x.avg[g])}${g==='ar'&&x.top?` <span class="muted">／${esc(x.top.t.band)} ${x.top.t.kind} ${pct(x.top.v)}</span>`:''}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>`:(busy?'':'<p class="muted">入れて伸びる未所持カードは見つかりませんでした。</p>')}</section>`}
+function viewGacha(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&&growOut.phase!=='done',n=CAT.members.filter(c=>!state.roster.m[c.id]?.own).length+CAT.snaps.filter(c=>!state.roster.s[c.id]?.own).length;
+  const sel=g=>`<label class="f">${GROW_GRP[g]}<select id="gw-${g}">${opts([[2,'重視'],[1,'普通'],[0,'使わない']],w[g])}</select></label>`;
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">ガチャ判断</h2>
+    <p class="note">未所持のカード（${n}枚）を1枚ずつ入れたら、遊ぶもの全体でどれだけ伸びるかを並べます。目的は「育成の優先度」と同じで、イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りです。</p>
+    <div class="row">${['ev','ar','gk'].map(sel).join('')}<label class="f">引いたカードの育成<select id="gst">${opts(Object.entries(GACHA_ST),gachaSt())}</select></label><button class="btn primary" data-act="gacha"${busy?' disabled':''}>ガチャ判断を計算</button></div></section>
   <div id="grow">${growHtml()}</div></div>`}
 // ===== 理想編成タブ（2026-10-30）: 今の手持ちを、選んだ項目だけ最大まで育てたと仮定して最適化する =====
 // 中身は最適化タブと同じ（目的・曲・入力・結果の表示を共有）。手持ちだけを一時的に差し替えて計算する。
@@ -1272,7 +1335,7 @@ function workerMain(){let T=null;
     try{
       if(j.type==='cmp')r=cmpRow(state.songs.find(x=>x.id===j.sid),j.obj);
       else if(j.type==='gbase'){T||=growTargets();r=growBaseOne(T,j.t)}
-      else if(j.type==='grow'){T||=growTargets();r={v:growJob(T,j.key,j.t)}}
+      else if(j.type==='grow'){T||=growTargets();r={v:growAny(T,j.key,j.t)}}
       else if(j.type==='opt'){const song=curSong(),go=()=>{seedRnd(12345);const x=solve(song,state.ui.obj,{gkCmp:true});return{...x,ctx:[M,S,CTX]}};r=j.ideal?withIdeal(go):go()}
     }catch(err){r={error:String(err&&err.message||err)}}
     self.postMessage({gen:d.gen,i:d.i,r})};
@@ -1283,12 +1346,13 @@ async function parCompare(id,obj,list){if(!(await poolReady()))return false;if(i
   await poolRun(poolInit(),list.map(s=>({type:'cmp',sid:s.id,obj})),(i,r)=>{R[i]=r.error&&!r.name?cmpErr(list[i],r.error):r;cmpOut.rows=R.filter(Boolean);cmpOut.done++;
     if(Date.now()-t>150||cmpOut.done>=cmpOut.total){t=Date.now();paintCmp()}},id);
   if(id===toolRun){cmpOut.rows=R.filter(Boolean);CHAL_CACHE=null;paintCmp()}return true}
-async function parGrow(id,T){if(!(await poolReady()))return false;if(id!==toolRun)return true;
+async function parGrow(id,T,mode){if(!(await poolReady()))return false;if(id!==toolRun)return true;
   let t=0;const paint=()=>{if(Date.now()-t>150||growOut.done>=growOut.total){t=Date.now();paintGrow()}};
   // 1) 各目的の元の値と候補
   const B=new Array(T.length);
   await poolRun(poolInit(),T.map((_,i)=>({type:'gbase',t:i})),(i,r)=>{B[i]=r;growOut.done++;paint()},id);if(id!==toolRun)return true;
   for(let i=0;i<T.length;i++){const r=B[i]||{};if(r.cc)CHAL_CACHE=Object.assign(CHAL_CACHE||{},r.cc);growAddBase(i,r)}
+  if(mode==='gacha')gachaAddJobs();
   // 2) 候補ごとに関係する目的だけ計算し直す
   growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();
   const J=growOut.jobs;
@@ -1527,7 +1591,7 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
 
 function render(){
   renderTabs();
-  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
+  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,gacha:viewGacha,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
   inTab(paintStale);
 }
@@ -1556,9 +1620,12 @@ function importData(o){
 const listOf=k=>k==='rules'?state.event.rules:state[k];
 function setPath(o,path,val){const ps=path.split('.');let x=o;for(let i=0;i<ps.length-1;i++){x[ps[i]]??={};x=x[ps[i]]}x[ps.at(-1)]=val}
 document.addEventListener('click',e=>{
-  const tb=e.target.closest('[data-tab]');if(tb){state.ui.tab=tb.dataset.tab;save();render();return}
+  // グループを押したら、そのグループで最後に開いていたサブタブへ
+  const gb=e.target.closest('[data-grp]');if(gb){const g=TAB_GROUPS.find(x=>x[0]===gb.dataset.grp),last=(state.ui.sub||{})[g[0]];state.ui.tab=g[2].some(x=>x[0]===last)?last:g[2][0][0];save();render();return}
+  const tb=e.target.closest('[data-tab]');if(tb){state.ui.tab=tb.dataset.tab;(state.ui.sub??={})[tabGroup(state.ui.tab)[0]]=state.ui.tab;save();render();return}
   const sh=e.target.closest('[data-show]');if(sh){inTab(()=>{const i=+sh.dataset.show;shownIdx=lastResult.frontier[i]===lastResult.best?null:i;document.getElementById('result').innerHTML=renderResult()});return}
   const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=idealRes=null;save();render();return}
+  const gf=e.target.closest('[data-gcf]');if(gf){state.ui.gcf={...(state.ui.gcf||{}),[gf.dataset.gcf]:gf.dataset.v};save();paintGrow();return}
   const gc=e.target.closest('[data-gcat]');if(gc){state.ui.gcat=gc.dataset.gcat;save();paintGrow();return}
   const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
@@ -1577,6 +1644,7 @@ document.addEventListener('click',e=>{
     case'importFile':document.getElementById('importFile')?.click();return;
     case'cmpSongs':startCompare();return;
     case'grow':startGrow();return;
+    case'gacha':startGrow('gacha');return;
     case'cmpSortVal':state.ui.cmpSort='val';save();paintCmp();return;
     case'cmpSortMin':state.ui.cmpSort='min';save();paintCmp();return;
     case'cmpPick':{const sid=e.target.closest('[data-song]')?.dataset.song;if(sid){const o=cmpOut?.obj||state.ui.obj;if(o==='chscore')state.ui.chSong=sid;state.ui.song=sid;state.ui.obj=o;state.ui.tab='opt';save();render();runOpt()}return}
@@ -1595,6 +1663,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.id.startsWith('idf-')){state.ui.idealF={...idealF(),[el.id.slice(4)]:el.checked};save();return}
+  if(el.id==='gst'){state.ui.gst=el.value;save();return}
   if(el.id==='obj'){state.ui.obj=el.value;save();render();return}
   if(el.id.startsWith('gw-')){state.ui.gw={...growW(),[el.id.slice(3)]:+el.value};save();return}
   if(el.id==='cmpObj'){state.ui.cmpObj=el.value;save();render();return}
