@@ -968,8 +968,8 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
       ${ordKpis(R,P,e)}
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
-      ${showPt?`<div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>`:''}
-      ${showIt?`<div class="kpi"><div class="k">アイテムボーナス</div><div class="v">+${e.it}%</div></div>`:''}
+      ${ev?`<div class="kpi"><div class="k">ptボーナス</div><div class="v">+${e.pt}%</div></div>`:''}
+      ${ev?`<div class="kpi"><div class="k">バッジボーナス</div><div class="v">+${e.it}%</div></div>`:''}
       ${freePlay&&showPt?`<div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>`:''}
       ${freePlay&&showIt?`<div class="kpi"><div class="k">アイテム / 回（LB${st.lb}）</div><div class="v">${fmt(vals[1])}</div></div>`:''}
       ${freePlay?`<div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>`:''}
