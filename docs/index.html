@@ -710,7 +710,9 @@ function solve(song,obj,opt={}){
   else if((obj==='ptTotal'||obj==='itemTotal')&&chSong){const keep=state.settings.chMult;state.settings.chMult=1;
     const cr=solve(chSong,obj==='ptTotal'?'chpt':'chitem');state.settings.chMult=keep;
     if(cr.best){const e=ev({...cr.best.t,detail:true});
-      chal={song:chSong.name,rank:RANKS[cr.best.rank],score:e.score,lo:e.lo,hi:e.hi,pt:e.pt,it:e.it,P:e.P,per1600:cr.best.val*8,vpc:cr.best.val/200,
+      // 到達率: スキル発動順120通りのうち、そのランク（と次のランク）の必要スコアに届く割合（フリーの推定ランクと同じ）
+      const rr=e.ord?(()=>{const n=e.ord.length,at=r=>{const th=chSong.thr?.[RANKS[r]];return th>0?Math.round(e.ord.filter(o=>o.s>=th).length/n*100):null},k=cr.best.rank;return[at(k),k+1<RANKS.length?RANKS[k+1]:'',k+1<RANKS.length?at(k+1):null]})():null;
+      chal={rr,song:chSong.name,rank:RANKS[cr.best.rank],score:e.score,lo:e.lo,hi:e.hi,pt:e.pt,it:e.it,P:e.P,per1600:cr.best.val*8,vpc:cr.best.val/200,
         slots:e.slots.map((x,i)=>slotRow(x,i===cr.best.t.L))};}
   }
   if(CHAL_CACHE&&ck&&(obj==='ptTotal'||obj==='itemTotal'))CHAL_CACHE[ck]=chal;
@@ -979,7 +981,7 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
         return`<div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）${u}</div><div class="v">${fmt(showPt?vals[0]+cpt*sh:vals[1]+cit*sh)}</div></div>`})()
       :R.obj==='chscore'?`<div class="kpi wide"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / バッジ</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`:''}
     </div>`}
-function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
+function chalKpis(C){const rr=C.rr;return`<div class="kpis"><div class="kpi"${rr?' title="（）内はスキル発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"':''}><div class="k">推定ランク</div><div class="v r" style="white-space:nowrap">${C.rank}${rr&&rr[0]!=null?`<span class="rr">（${rr[0]}%）</span>`:''}${rr&&rr[2]>0?`<span class="rr">／${rr[1]} ${rr[2]}%</span>`:''}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(C.score)}</div></div>
       <div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap;font-size:18px">+${C.pt}% / +${C.it}%</div></div>
