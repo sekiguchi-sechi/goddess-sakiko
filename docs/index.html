@@ -858,10 +858,6 @@ function arenaTodayHtml(band){const R=arenaRule(band),L=typeof MY_DATA!=='undefi
 function optKey(){const u=state.ui,st=state.settings,o=u.obj,song=curSong();
   return JSON.stringify([o,u.song,(o==='ptTotal'||o==='itemTotal'||o==='chscore')?u.chSong:'',o==='arena'&&song?.band?arenaRule(song.band):'',st.margin,isGk(o)?[st.gkJust,st.gkJudgeN,st.gkComboReq,st.gkLuckReq]:''])}
 function paintStale(){const r=document.getElementById('result'),n=document.getElementById('staleNote');if(!r||!n)return;const s=!!(lastResult&&lastResult.key&&lastResult.key!==optKey());r.classList.toggle('stale',s);n.hidden=!s}
-// イベントpt・バッジの目的: フリー編成とチャレンジ編成の要約を先頭に並べる
-function sumHtml(R,P,e,song){const C=R.chal;if(!C)return'';const L=P.t.L,fm=e.slots.map((x,i)=>`${esc(x.m.chara)}${i===L?'★':''}`).join('・'),cm=C.slots.map(x=>`${esc(x.chara)}${x.lead?'★':''}`).join('・');
-  return`<div class="sumgrid"><div class="sumcard"><div class="k">フリー — ${esc(song.name)}</div><div class="v"><b class="r">${RANKS[P.rank]}</b> ${fmt(e.score)}</div><div class="m">${fm}</div></div>
-    <div class="sumcard"><div class="k">チャレンジ — ${esc(C.song)}</div><div class="v"><b class="r">${esc(C.rank)}</b> ${fmt(C.score)}</div><div class="m">${cm}</div></div></div>`}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
   // 目的に関係する入力だけを出す（楽曲: チャレンジスコア以外、チャレンジ楽曲: 合計とチャレンジスコア、ブースト: 合計のみ、消費倍率: 合計とチャレンジスコア）
@@ -1013,18 +1009,15 @@ function renderResult(){
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const bp=bestOrderPos(e),slots=teamTable(e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})));
-  const fr=R.cmp?gkCmpHtml(R,P):R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">余裕込みの必要スコア</th><th class="num">発動順の最低〜最高</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
-    ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${p.e.ord?`${fmt(p.e.ord[0].s)} 〜 ${fmt(p.e.ord[p.e.ord.length-1].s)}`:'—'}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
-    </tbody></table></div></details>`:'';
+  // 到達ランク別の候補（イベントpt・バッジ）は最適の編成より少ない候補を並べるだけなので出さない（2026-10-30）
+  const fr=R.cmp?gkCmpHtml(R,P):'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
   const C=R.chal;let chalHtml='';
-  if(C){const isPt=R.obj==='ptTotal',boost=st.lb>0?st.lb*5:1,Rk=RANKS[P.rank];
-    const direct=Math.floor(((isPt?st.ptBase[Rk]:st.itemBase[Rk])||0)*(1+(isPt?e.pt:e.it)/100)*boost),cp=Math.floor((st.chGainBase[Rk]||0)*boost);
+  if(C){
     chalHtml=`<div class="panel stack"><h2>チャレンジ — ${esc(C.song)}</h2>
-    <p class="note">フリーライブ1回（LB${st.lb}）で：直接 ${fmt(direct)} ＋ チャレンジpt ${cp} → チャレンジライブ換算 ${fmt(cp*C.vpc)}（合計 ${fmt(direct+cp*C.vpc)}）。チャレンジpt 1あたり ${C.vpc.toFixed(1)}${isPt?'pt':'個'}。チャレンジライブではイベント対象カードの総合力がボーナス分上がります（パラメータボーナス）。</p>
     ${kpiBox(chalKpis(C))}
     ${teamTable(C.slots)}</div>`}
-  return`<div class="stack">${sumHtml(R,P,e,song)}<div class="panel stack">
+  return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
     ${R.obj==='arena'?'':`<p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>`}${isGk(R.obj)&&R.obj!=='arena'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
@@ -1033,7 +1026,7 @@ function renderResult(){
     ${R.lkMax!=null?`<p class="note">LUCK値：<b>${fmt(e.lk||0)}</b>（手持ちの最高 ${fmt(R.lkMax)}${R.lkReq==='second'?`、2番目 ${fmt(R.lkThr)}`:''}）${(e.lk||0)<R.lkThr*(1-1e-9)?' <span class="warn">指定に届いていません</span>':''}</p>`:''}
     ${R.arena?`<p class="note"><b>アリーナのルール（${esc(song.band||'')}）：タイプ ${R.arena.type==='all'?'ALL':esc(R.arena.type||song.type)}${R.arena.type?'':'（楽曲のまま）'}／撃奏区間 ${R.arena.gk} ×3</b></p>`:isGk(R.obj)?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${!isGk(R.obj)?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
+  </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）／育成の優先度（最適化の結果の下） =====
