@@ -155,6 +155,7 @@ tr.rt-sure-first td{border-top:2px dashed var(--line)}
 .helpwrap{position:relative;display:inline-flex;align-self:center}
 .helpwrap .tip{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:20;width:max-content;max-width:min(340px,80vw);padding:8px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--panel-2);color:var(--ink);font-size:12px;line-height:1.6;box-shadow:0 6px 20px rgba(0,0,0,.4);pointer-events:none}
 @media (hover:hover){.helpwrap:hover .tip,.helpwrap:focus-within .tip{display:block}}
+.kpi .v .rr{font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
 </style>
 
 <header class="top">
@@ -886,10 +887,11 @@ function viewOpt(){
 }
 // スキル発動順120通りの厳密値（曲の重み表がある場合）: 最低〜最高、推定ランクと次のランクに届く順番の数、最高になる発動順
 function ordKpis(R,P,e){if(!e.ord)return'';const song=state.songs.find(s=>s.id===R.songId)||curSong(),O=e.ord,n=O.length;
-  const reach=r=>{const th=song.thr?.[RANKS[r]];return th>0?O.filter(o=>o.s>=th).length:null};
-  const rr=[P.rank,P.rank+1].filter(r=>r>0&&r<RANKS.length).map(r=>[r,reach(r)]).filter(([r,c])=>c!=null&&(c>0||r===P.rank));
-  return`<div class="kpi wide"><div class="k">発動順120通りの最低〜最高</div><div class="v" style="font-size:17px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div></div>
-      ${rr.length?`<div class="kpi" title="発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"><div class="k">ランク到達率</div><div class="v" style="font-size:17px">${rr.map(([r,c])=>`${RANKS[r]} ${Math.round(c/n*100)}%`).join('／')}</div></div>`:''}`}
+  return`<div class="kpi wide"><div class="k">スキル発動順120通りの最低〜最高</div><div class="v" style="font-size:17px">${fmt(O[0].s)} 〜 ${fmt(O[n-1].s)}</div></div>`}
+// 推定ランクの枠: 「SS（96%）」＝スキル発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）。次のランクに届く並びがあれば添える
+function rankKpi(R,P,e){let sub='';if(e.ord){const song=state.songs.find(s=>s.id===R.songId)||curSong(),O=e.ord,n=O.length,reach=r=>{const th=song.thr?.[RANKS[r]];return th>0?O.filter(o=>o.s>=th).length:null};
+    const c=reach(P.rank),nx=P.rank+1<RANKS.length?reach(P.rank+1):null;if(c!=null)sub=`<span class="rr">（${Math.round(c/n*100)}%）</span>`;if(nx>0)sub+=`<span class="rr">／${RANKS[P.rank+1]} ${Math.round(nx/n*100)}%</span>`}
+  return`<div class="kpi"${e.ord?' title="（）内はスキル発動順120通りのうち、そのランクの必要スコアに届く割合（AP・余裕なし）"':''}><div class="k">推定ランク</div><div class="v r" style="white-space:nowrap">${RANKS[P.rank]}${sub}</div></div>`}
 // 覚えるルール: 完走すれば必ず目標に届く（届かない並びが残らない）ための「k番目：○○ならリトライ」の組み合わせを探す。
 // 1手ごとに「ある番目のある人をリトライにする」を足し、各段で有望な40通り（届かない並びが少ないもの20＋届く並びが多いもの20）を残す。
 // 届かない並びが0になった組み合わせのうち、届く並びが一番多く残るもの → 使う番目が少ないもの → 目標まで速いもの。表示は番目の順に1行ずつ。
@@ -964,24 +966,23 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
       <div class="kpi"><div class="k">全区間2位のとき</div><div class="v">${fmt(e.gkLose)}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div></div>`;
   return`<div class="kpis">
-      <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
+      ${rankKpi(R,P,e)}
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
       ${ordKpis(R,P,e)}
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
-      ${ev?`<div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v">+${e.pt}% / +${e.it}%</div></div>`:''}
+      ${ev?`<div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap">+${e.pt}% / +${e.it}%</div></div>`:''}
       ${freePlay&&showPt?`<div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>`:''}
-      ${freePlay&&showIt?`<div class="kpi"><div class="k">アイテム / 回（LB${st.lb}）</div><div class="v">${fmt(vals[1])}</div></div>`:''}
+      ${freePlay&&showIt?`<div class="kpi"><div class="k">バッジ / 回（LB${st.lb}）</div><div class="v">${fmt(vals[1])}</div></div>`:''}
       ${freePlay?`<div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>`:''}
       ${R.chal?(()=>{const C=R.chal,m=st.chMult,cp=vals[4];const cpt=Math.floor((st.chPtBase[C.rank]||0)*m*(1+C.pt/100)),cit=Math.floor((st.chItemBase[C.rank]||0)*m*(1+C.it/100)),sh=cp/(200*m);
-        const u=showPt?'pt':'アイテム';
-        return`<div class="kpi"><div class="k">チャレンジ編成 ${m}倍1回 ${u}</div><div class="v">${fmt(showPt?cpt:cit)}</div></div>
-        <div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）${u}</div><div class="v">${fmt(showPt?vals[0]+cpt*sh:vals[1]+cit*sh)}</div></div>`})()
-      :R.obj==='chscore'?`<div class="kpi wide"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / アイテム</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`:''}
+        const u=showPt?'pt':'バッジ';
+        return`<div class="kpi wide" style="border-color:var(--accent)"><div class="k">フリー1回あたり合計（チャレンジ換算込み）${u}</div><div class="v">${fmt(showPt?vals[0]+cpt*sh:vals[1]+cit*sh)}</div></div>`})()
+      :R.obj==='chscore'?`<div class="kpi wide"><div class="k">この編成でチャレンジ ${st.chMult}倍 pt / バッジ</div><div class="v">${fmt(vals[2])} / ${fmt(vals[3])}</div></div>`:''}
     </div>`}
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(C.score)}</div></div>
-      <div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
+      <div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
 // 撃奏の指標と推定スコアの比較表（区間の種類ごと）。指標が高い順、どちらも負けている編成は除く
