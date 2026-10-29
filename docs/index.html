@@ -988,10 +988,6 @@ function chalKpis(C){const rr=C.rr;return`<div class="kpis"><div class="kpi"${rr
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
 // 撃奏の指標と推定スコアの比較表（区間の種類ごと）。指標が高い順、どちらも負けている編成は除く
-// 最適の編成から入れ替わるカード（メンバー・スナップ）。アリーナは同じバンドの5人になりやすいので、キャラ名より違いを出す
-function teamDiff(t,b){const ms=x=>x.m.map(i=>M[i]),ss=x=>x.s.map(i=>S[i]).filter(z=>z&&!z.none),out=[],key=z=>z.cid??z.name;
-  const d=(A,B,lab)=>{const a=new Set(A.map(key)),bb=new Set(B.map(key)),o=A.filter(z=>!bb.has(key(z))),n=B.filter(z=>!a.has(key(z)));if(o.length||n.length)out.push(`<span class="muted">${lab}</span> ${o.map(z=>`<s>${esc(z.name)}</s>`).join('・')} → ${n.map(z=>`<b>${esc(z.name)}</b>${z.chara?`<span class="muted">（${esc(z.chara)}）</span>`:''}`).join('・')}`)};
-  d(ms(b),ms(t),'メンバー');d(ss(b),ss(t),'スナップ');return out.length?out.join('<br>'):'<span class="muted">同じカード（並びだけ違う）</span>'}
 function gkCmpHtml(R,P){const b=R.best.e;
   const LBL={LUCK:['LUCK値','LUCK値の下限を手持ちの最高の100%〜50%で変えて','LUCK値が高いほど抽選で LUCK pt を稼ぎやすい'],
     COMBO:['COMBO上乗せ','撃奏COMBO獲得量の上乗せ合計の下限を最高から1ずつ下げて','上乗せが1多いと1ノーツごとのCOMBOが1多い'],
@@ -999,8 +995,8 @@ function gkCmpHtml(R,P){const b=R.best.e;
   return R.cmp.filter(c=>c.rows.length).map(c=>{const L=LBL[c.kind],show=v=>c.kind==='COMBO'?'+'+v:c.kind==='JUST'?Math.round(v)+'%':fmt(v);
     return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>${L[0]}と推定スコアの比較（${c.kind}）</b> <span class="muted">（${c.rows.length}件）</span></summary>
   <p class="note">${L[1]}、それぞれスコアが最大の編成を探しました（撃奏スキル持ちの人数の条件は残しています）。${L[2]}。推定スコアは区間1位をとれたときの値です。${c.rows.length===1?`<b>最適な編成が${L[0]}も手持ちの最高なので、比べる候補はありません。</b>`:''}</p>
-  <div class="tbl"><table><thead><tr><th class="num">${L[0]}</th><th class="num">${c.kind==='JUST'?'判定幅スナップ':'最高比'}</th>${c.kind==='JUST'?'<th class="num">JUSTスキル</th>':''}<th class="num">推定スコア</th><th class="num">スコア差</th><th>最適の編成からの入れ替え</th><th></th></tr></thead><tbody>
-  ${c.rows.map(({i,v})=>{const p=R.frontier[i];return`<tr class="${p===R.best?'best':''}"><td class="num"><b>${show(v)}</b></td><td class="num">${c.kind==='JUST'?(p.e.njc||0)+'枚':Math.round(v/c.max*100)+'%'}</td>${c.kind==='JUST'?`<td class="num">${(p.e.mk||{}).JUST||0}人</td>`:''}<td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td style="font-size:12px;white-space:normal;min-width:260px;line-height:1.5">${p===R.best?'<span class="muted">—</span>':teamDiff(p.t,R.best.t)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`}).join('')}
+  <div class="tbl"><table><thead><tr><th class="num">${L[0]}</th><th class="num">${c.kind==='JUST'?'判定幅スナップ':'最高比'}</th>${c.kind==='JUST'?'<th class="num">JUSTスキル</th>':''}<th class="num">推定スコア</th><th class="num">スコア差</th><th></th></tr></thead><tbody>
+  ${c.rows.map(({i,v})=>{const p=R.frontier[i];return`<tr class="${p===R.best?'best':''}"><td class="num"><b>${show(v)}</b></td><td class="num">${c.kind==='JUST'?(p.e.njc||0)+'枚':Math.round(v/c.max*100)+'%'}</td>${c.kind==='JUST'?`<td class="num">${(p.e.mk||{}).JUST||0}人</td>`:''}<td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`}).join('')}
   </tbody></table></div></details>`}).join('')}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
