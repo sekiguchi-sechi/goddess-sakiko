@@ -825,7 +825,7 @@ function solve(song,obj,opt={}){
 }
 
 // ===== 描画 =====
-const TABS=PUBLIC?[['opt','最適化'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
+const TABS=PUBLIC?[['opt','最適化'],['ideal','理想編成'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['settings','データ']]:[['opt','最適化'],['ideal','理想編成'],['compare','全曲比較'],['growth','育成'],['members','メンバー'],['snaps','スナップ'],['songs','楽曲'],['event','イベント'],['settings','設定・データ']];
 let lastResult=null,shownIdx=null;
 function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
@@ -871,7 +871,7 @@ function arenaTodayHtml(band){const R=arenaRule(band),L=typeof MY_DATA!=='undefi
 // 結果を出したときの条件。違えば「条件が変わりました」を出す（ブースト・消費倍率は結果の表示だけ変わるので含めない）
 function optKey(){const u=state.ui,st=state.settings,o=u.obj,song=curSong();
   return JSON.stringify([o,u.song,(o==='ptTotal'||o==='itemTotal'||o==='chscore')?u.chSong:'',o==='arena'&&song?.band?arenaRule(song.band):'',st.margin,isGk(o)?[st.gkJust,st.gkJudgeN,st.gkComboReq,st.gkLuckReq]:''])}
-function paintStale(){const r=document.getElementById('result'),n=document.getElementById('staleNote');if(!r||!n)return;const s=!!(lastResult&&lastResult.key&&lastResult.key!==optKey());r.classList.toggle('stale',s);n.hidden=!s}
+function paintStale(){const r=document.getElementById('result'),n=document.getElementById('staleNote');if(!r||!n)return;const s=!!(lastResult&&lastResult.key&&lastResult.key!==(state.ui.tab==='ideal'?idealKey():optKey()));r.classList.toggle('stale',s);n.hidden=!s}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
   // 目的に関係する入力だけを出す（楽曲: チャレンジスコア以外、チャレンジ楽曲: 合計とチャレンジスコア、ブースト: 合計のみ、消費倍率: 合計とチャレンジスコア）
@@ -1010,6 +1010,8 @@ function gkCmpHtml(R,P){const b=R.best.e;
   </tbody></table></div></details>`}).join('')}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
+  // 計算したときのカード一覧に戻す（他のタブの計算で入れ替わっていても正しく出す）
+  if(R.ctx)[M,S,CTX]=R.ctx;
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
   if(!R.best)return`<div class="panel warn">どのランクの必要スコアにも届く編成がありません。楽曲の閾値と手持ちを確認してください。</div>`;
   const P=shownIdx!=null?R.frontier[shownIdx]:R.best;
@@ -1174,6 +1176,36 @@ function viewGrowth(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&
     <p class="note">遊ぶもの全体で、どのカードをどう育てると伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りを計算します。1〜2分ほどかかります。</p>
     <div class="row">${['ev','ar','gk'].map(sel).join('')}<button class="btn primary" data-act="grow"${busy?' disabled':''}>育成の優先度を計算</button></div></section>
   <div id="grow">${growHtml()}</div></div>`}
+// ===== 理想編成タブ（2026-10-30）: 今の手持ちを、選んだ項目だけ最大まで育てたと仮定して最適化する =====
+// 中身は最適化タブと同じ（目的・曲・入力・結果の表示を共有）。手持ちだけを一時的に差し替えて計算する。
+// 項目: 特訓（メンバー）／レベル（メンバー・スナップ。今の特訓・上限解放の上限まで）／ライブスキルLv／撃奏スキルLv／覚醒（メンバー。スナップは上限解放）
+let idealRes=null,idealShown=null;
+const IDEAL_F=[['tr','特訓'],['lv','レベル'],['sl','ライブスキルLv'],['gl','撃奏スキルLv'],['rk','覚醒（スナップは上限解放）']];
+const idealF=()=>({tr:true,lv:true,sl:true,gl:true,rk:true,...(state.ui.idealF||{})});
+function idealRoster(){const f=idealF(),R=JSON.parse(JSON.stringify(state.roster||{m:{},s:{}}));
+  for(const id in R.m){const r=R.m[id],c=CM[id];if(!r.own||!c)continue;
+    if(f.tr)r.tr=c.lim.length;if(f.lv)r.lv=c.lim[r.tr-1];if(f.rk)r.rk=5;if(f.sl)r.sl=5;if(f.gl&&c.geki)r.gl=5;clampR('m',c,r)}
+  for(const id in R.s){const r=R.s[id],c=CSN[id];if(!r.own||!c)continue;
+    if(f.rk)r.rk=c.rk.length;if(f.lv)r.lv=c.rk[r.rk-1][0];clampR('s',c,r)}
+  return R}
+// 手持ちを理想の状態にして fn を実行し、元に戻す
+function withIdeal(fn){const keep=state.roster;state.roster=idealRoster();materialize();try{return fn()}finally{state.roster=keep;materialize()}}
+// 理想編成タブでは、最適化タブの結果（lastResult・shownIdx）と理想編成の結果を入れ替えて、同じ表示・操作の処理を使う
+function inTab(fn){if(state.ui.tab!=='ideal')return fn();
+  [lastResult,idealRes]=[idealRes,lastResult];[shownIdx,idealShown]=[idealShown,shownIdx];
+  try{return fn()}finally{[lastResult,idealRes]=[idealRes,lastResult];[shownIdx,idealShown]=[idealShown,shownIdx]}}
+function idealPanel(){const f=idealF();
+  return`<section class="panel stack"><div class="row" style="align-items:center;gap:14px;flex-wrap:wrap"><b>最大まで育てる項目</b>
+    ${IDEAL_F.map(([k,l])=>`<label class="chk"><input type="checkbox" id="idf-${k}"${f[k]?' checked':''}> ${l}</label>`).join('')}</div>
+    <p class="note">所持しているカードすべてを、チェックした項目だけ最大にしたと仮定して計算します（登録した手持ちは変わりません）。レベルは特訓・上限解放の上限まで上げます。</p></section>`}
+const idealKey=()=>optKey()+JSON.stringify(idealF());
+function viewIdeal(){return inTab(()=>{let h=viewOpt();
+  h=h.replace('<section class="panel stack">',idealPanel()+'<section class="panel stack">');
+  // 同じ条件の最適化タブの結果があれば、今の手持ちとの比較を出す
+  const O=idealRes,I=lastResult;
+  if(I&&I.best&&O&&O.best&&O.key===optKey()&&I.key===idealKey()){const a=O.best.val,b=I.best.val,lab=OBJECTIVES.find(o=>o.id===I.obj)?.label||'';
+    h=h.replace('<section id="result"',`<div class="panel note">今の手持ちの最適（${esc(lab)}）：<b>${fmt(Math.round(a))}</b> → 理想：<b>${fmt(Math.round(b))}</b>${a>0?`（${b>=a?'+':''}${((b/a-1)*100).toFixed(1)}%）`:''}</div><section id="result"`)}
+  return h})}
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
 const n5=[1,2,3,4,5];
 // 絞り込み: バンド・レア度・タイプは複数選択（空＝すべて）。旧形式（1つの文字列）は配列に直す
@@ -1399,9 +1431,9 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
 
 function render(){
   renderTabs();
-  const v={opt:viewOpt,compare:viewCompare,growth:viewGrowth,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
+  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
-  paintStale();
+  inTab(paintStale);
 }
 
 // JSON取り込み: 全体のバックアップ（songs と roster を含む）なら置き換え、それ以外は書いてある項目だけ上書き
@@ -1429,8 +1461,8 @@ const listOf=k=>k==='rules'?state.event.rules:state[k];
 function setPath(o,path,val){const ps=path.split('.');let x=o;for(let i=0;i<ps.length-1;i++){x[ps[i]]??={};x=x[ps[i]]}x[ps.at(-1)]=val}
 document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');if(tb){state.ui.tab=tb.dataset.tab;save();render();return}
-  const sh=e.target.closest('[data-show]');if(sh){const i=+sh.dataset.show;shownIdx=lastResult.frontier[i]===lastResult.best?null:i;document.getElementById('result').innerHTML=renderResult();return}
-  const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=null;save();render();return}
+  const sh=e.target.closest('[data-show]');if(sh){inTab(()=>{const i=+sh.dataset.show;shownIdx=lastResult.frontier[i]===lastResult.best?null:i;document.getElementById('result').innerHTML=renderResult()});return}
+  const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=idealRes=null;save();render();return}
   const gc=e.target.closest('[data-gcat]');if(gc){state.ui.gcat=gc.dataset.gcat;save();paintGrow();return}
   const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
@@ -1439,8 +1471,8 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
   switch(a){
-    case'useAuthor':if(Object.values(state.roster.m).some(r=>r.own)&&state.rosterSrc!=='author'&&!confirm('今の手持ちの登録を、作者の手持ちに置き換えますか？（先に「ファイルに書き出す」で控えを取れます）'))return;useAuthor();lastResult=null;break;
-    case'clearRoster':if(!confirm('手持ちの登録をすべて消しますか？'))return;state.roster={m:{},s:{}};state.rosterSrc='';materialize();lastResult=null;break;
+    case'useAuthor':if(Object.values(state.roster.m).some(r=>r.own)&&state.rosterSrc!=='author'&&!confirm('今の手持ちの登録を、作者の手持ちに置き換えますか？（先に「ファイルに書き出す」で控えを取れます）'))return;useAuthor();lastResult=idealRes=null;break;
+    case'clearRoster':if(!confirm('手持ちの登録をすべて消しますか？'))return;state.roster={m:{},s:{}};state.rosterSrc='';materialize();lastResult=idealRes=null;break;
     case'goMembers':state.ui.tab='members';break;
     case'showAll':cardFilter().own='all';break;
     case'exportFile':{const name='goddess-sakiko-'+new Date().toISOString().slice(0,10)+'.json',data=JSON.stringify(exportData(),null,1);
@@ -1454,26 +1486,27 @@ document.addEventListener('click',e=>{
     case'cmpPick':{const sid=e.target.closest('[data-song]')?.dataset.song;if(sid){const o=cmpOut?.obj||state.ui.obj;if(o==='chscore')state.ui.chSong=sid;state.ui.song=sid;state.ui.obj=o;state.ui.tab='opt';save();render();runOpt()}return}
 
     case'addSong':{const s={id:uid(),name:'新しい曲',type:'all',len:120,K:4.5,thr:{}};state.songs.push(s);break}
-    case'loadEvent':{const id=document.getElementById('evPreset').value;state.event=myEvent(id);pickChSong(state.event);lastResult=null;break}
+    case'loadEvent':{const id=document.getElementById('evPreset').value;state.event=myEvent(id);pickChSong(state.event);lastResult=idealRes=null;break}
     case'addRule':state.event.rules.push({id:uid(),label:'',card:'',chara:'',band:'',type:'',target:'both',bonus:'',param:''});break;
     case'resetSettings':{const k=state.settings;state.settings={...defaultSettings(),charaRankLv:k.charaRankLv,bandItem:k.bandItem,vip:k.vip};break}
     case'exportJson':document.getElementById('json').value=JSON.stringify(state,null,1);msg('現在のデータを表示しました。');return;
     case'copyJson':{const ta=document.getElementById('json');if(!ta.value)ta.value=JSON.stringify(state,null,1);
       navigator.clipboard?.writeText(ta.value).then(()=>msg('コピーしました。'),()=>{ta.select();msg('自動コピーできないため選択しました。Ctrl+Cでコピーしてください。')});return}
-    case'importJson':try{const o=JSON.parse(document.getElementById('json').value);if(!o.roster&&!Array.isArray(o.members))throw 0;state=o;normalize();lastResult=null;save();render();msg('読み込みました。')}catch(_){msg('JSONとして読めませんでした。「JSONを表示」で出した形式のまま貼り付けてください。')}return;
+    case'importJson':try{const o=JSON.parse(document.getElementById('json').value);if(!o.roster&&!Array.isArray(o.members))throw 0;state=o;normalize();lastResult=idealRes=null;save();render();msg('読み込みました。')}catch(_){msg('JSONとして読めませんでした。「JSONを表示」で出した形式のまま貼り付けてください。')}return;
   }
   save();render();
 });
 document.addEventListener('change',e=>{
   const el=e.target;
+  if(el.id.startsWith('idf-')){state.ui.idealF={...idealF(),[el.id.slice(4)]:el.checked};save();return}
   if(el.id==='obj'){state.ui.obj=el.value;save();render();return}
   if(el.id.startsWith('gw-')){state.ui.gw={...growW(),[el.id.slice(3)]:+el.value};save();return}
   if(el.id==='cmpObj'){state.ui.cmpObj=el.value;save();render();return}
   if(el.id==='songSel'||el.id==='chSongSel')return;
-  if(el.id==='lb'){state.settings.lb=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
-  if(el.id==='chMult'){state.settings.chMult=+el.value;save();if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult();return}
+  if(el.id==='lb'){state.settings.lb=+el.value;save();inTab(()=>{if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult()});return}
+  if(el.id==='chMult'){state.settings.chMult=+el.value;save();inTab(()=>{if(lastResult&&!lastResult.error)document.getElementById('result').innerHTML=renderResult()});return}
   if(el.id==='margin'){state.settings.margin=+el.value||0;save();return}
-  if(el.id==='retryTop'){state.settings.retryTop=Math.min(50,Math.max(1,Math.round(+el.value)||10));save();const r=document.getElementById('result');if(r&&lastResult)r.innerHTML=renderResult();return}
+  if(el.id==='retryTop'){state.settings.retryTop=Math.min(50,Math.max(1,Math.round(+el.value)||10));save();inTab(()=>{const r=document.getElementById('result');if(r&&lastResult)r.innerHTML=renderResult()});return}
   if(el.id==='gkJust'){state.settings.gkJust=Math.max(0,Math.min(100,+el.value||0));save();return}
   if(el.id==='gkJudgeN'){state.settings.gkJudgeN=el.value===''?null:+el.value;save();return}
   if(el.id==='gkComboReq'||el.id==='gkLuckReq'){state.settings[el.id]=el.value;if(el.id==='gkComboReq')delete state.settings.gkComboMax;save();return}
@@ -1481,10 +1514,10 @@ document.addEventListener('change',e=>{
     // 手で選んだ値はそのルールの期間だけ有効（期間の開始 at で見分ける）。自動の値と同じに戻したら手動を外す
     if(!r||(g&&r.at!==g[0]))r=R[b]=g?{at:g[0]}:{};if(g&&el.value===g[k==='gk'?3:2])delete r[k];else r[k]=el.value;save();render()}return}
   if(el.id==='evName'){state.event.name=el.value;save();return}
-  if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=null;save();if(state.ui.tab==='members')render();return}
+  if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=idealRes=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
   if(el.id==='songQ'){state.ui.songQ=el.value;save();render();document.getElementById('songQ')?.focus();return}
-  if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
+  if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=idealRes=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
   const ctr=el.closest('tr[data-kind="cm"],tr[data-kind="cs"]');
   if(ctr&&el.dataset.f){const k=ctr.dataset.kind==='cm'?'m':'s',id=ctr.dataset.id,c=(k==='m'?CM:CSN)[id],f=el.dataset.f;
     let r=state.roster[k][id];if(!r){r=state.roster[k][id]=k==='m'?newMR(c):newSR(c);r.own=0}
@@ -1492,13 +1525,13 @@ document.addEventListener('change',e=>{
     // 特訓・上限解放を変えたとき、Lvが前の上限ちょうどなら新しい上限に合わせる
     if(f==='tr'&&k==='m'&&r.lv===c.lim[old-1])r.lv=c.lim[r.tr-1];
     if(f==='rk'&&k==='s'&&r.lv===c.rk[old-1][0])r.lv=c.rk[r.rk-1][0];
-    clampR(k,c,r);r.ed=1;materialize();lastResult=null;save();render();return}
+    clampR(k,c,r);r.ed=1;materialize();lastResult=idealRes=null;save();render();return}
   const tr=el.closest('tr[data-kind]');if(!tr||!el.dataset.f)return;
   const item=listOf(tr.dataset.kind).find(x=>x.id===tr.dataset.id);if(!item)return;
   const f=el.dataset.f;let v=el.type==='checkbox'?el.checked:(el.dataset.n!==undefined?(el.value===''?'':+el.value):el.value);
   if(f.startsWith('thr.')){item.thr||={};item.thr[f.slice(4)]=v===''?0:v}
   else item[f]=v;
-  lastResult=null;save();
+  lastResult=idealRes=null;save();
   if(['chara','type','name','band','target','card','bonus','param'].includes(f))render();
 });
 // 開閉の状態を覚える（次に開いたときも同じ）。スコア・ボーナスはフリーとチャレンジで連動
@@ -1513,16 +1546,19 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
 function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")growOut=null;if(cmpOut&&cmpOut.done<cmpOut.total)cmpOut=null;
   const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}document.getElementById('result')?.classList.add('busy');
   setTimeout(()=>{
-    const song=curSong();
-    if(!song){lastResult={error:'楽曲タブで曲を登録してください。'}}
-    else{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});lastResult={...r,obj:state.ui.obj,key:optKey()}}
-    shownIdx=null;save();render();
+    const song=curSong(),id=state.ui.tab==='ideal';
+    if(!song){const e={error:'楽曲タブで曲を登録してください。'};if(id)idealRes=e;else lastResult=e}
+    else{const go=k=>{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});return{...r,obj:state.ui.obj,key:k,ctx:[M,S,CTX]}};
+      // 理想編成では、今の手持ちの結果が同じ条件で無ければ一緒に計算する（差を出すため。最適化タブの結果にもなる）
+      if(id){if(!lastResult||lastResult.key!==optKey()){lastResult=go(optKey());shownIdx=null}idealRes=withIdeal(()=>go(idealKey()));idealShown=null}
+      else{lastResult=go(optKey());shownIdx=null}}
+    save();render();
   },30);
 }
 
 
 // 条件を変えたら、出ている結果が古いことを示す
-document.addEventListener('change',()=>setTimeout(paintStale,0));
+document.addEventListener('change',()=>setTimeout(()=>inTab(paintStale),0));
 // ===== 楽曲のコンボボックス（入力すれば検索、空欄なら全曲の一覧） =====
 const NO_CH='なし（チャレンジライブ無し）';
 function comboHtml(id,val){return`<span class="combo"><input id="${id}" class="songpick" value="${esc(val)}" data-prev="${esc(val)}" autocomplete="off" role="combobox" aria-expanded="false" placeholder="曲名を入力（空欄で一覧）"><button type="button" class="combo-btn" data-combo-btn="${id}" tabindex="-1" aria-label="一覧を開く">▾</button><span class="combo-list" role="listbox" hidden></span></span>`}
