@@ -970,7 +970,7 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
       ${ordKpis(R,P,e)}
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div>
-      ${ev?`<div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap">+${e.pt}% / +${e.it}%</div></div>`:''}
+      ${ev?`<div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap;font-size:18px">+${e.pt}% / +${e.it}%</div></div>`:''}
       ${freePlay&&showPt?`<div class="kpi"><div class="k">pt / 回（LB${st.lb}）</div><div class="v">${fmt(vals[0])}</div></div>`:''}
       ${freePlay&&showIt?`<div class="kpi"><div class="k">バッジ / 回（LB${st.lb}）</div><div class="v">${fmt(vals[1])}</div></div>`:''}
       ${freePlay?`<div class="kpi"><div class="k">獲得チャレンジpt / 回</div><div class="v">${fmt(vals[4])}</div></div>`:''}
@@ -982,7 +982,7 @@ function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chite
 function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">推定ランク</div><div class="v r">${C.rank}</div></div>
       <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(C.P)}</div></div>
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(C.score)}</div></div>
-      <div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap">+${C.pt}% / +${C.it}%</div></div>
+      <div class="kpi"><div class="k">ボーナス pt / バッジ</div><div class="v" style="white-space:nowrap;font-size:18px">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
 // 撃奏の指標と推定スコアの比較表（区間の種類ごと）。指標が高い順、どちらも負けている編成は除く
