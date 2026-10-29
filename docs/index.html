@@ -267,6 +267,8 @@ function load(){
 }
 function normalize(){
   const d=defaultSettings();
+  // 使い方パネルの開閉は、最初に開いて描いたときの toggle を「開いた」と記録していた（2026-10-30 まで）。一度消す
+  if(state.ui&&state.ui.guideV!==1){delete state.ui.guide;state.ui.guideV=1}
   // ver1 の推定値は minemineaoao 氏のイベント攻略ページの実値で置き換える
   if(state.settings&&(state.settings.ver||1)<2){for(const k of ['ptBase','itemBase','chPtBase','chItemBase','chMult','lb'])delete state.settings[k];state.settings.ver=2}
   if(state.settings&&state.settings.ver<3){const s=state.settings;
@@ -867,7 +869,7 @@ function viewOpt(){
       ${useCh?`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||song)?.name||''))}</label>`:''}
       ${useLb?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
       ${useMult?`<label class="f">チャレンジ消費倍率<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>`:''}
-      <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
+      ${o==='arena'?'':`<label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>`}
       ${isGk(o)?gkInputs(song,o,'req'):''}
       <button class="btn primary" id="run">最適編成を計算</button>
       <span class="help" tabindex="0" title="推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}">?</span>
@@ -1450,7 +1452,7 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   else if(d.matches('details[data-fr]'))state.ui.frOpen=d.open;
   else if(d.matches('details[data-slotw]'))state.ui.slotWOpen=d.open;
   else if(d.matches('details[data-retry]'))state.ui.retryOpen=d.open;
-  else if(d.matches('details[data-guide]'))state.ui.guide=d.open;
+  else if(d.matches('details[data-guide]')){if(state.members.length>=5&&state.snaps.length>=5)state.ui.guide=d.open}
   else return;
   save()},true);
 function runOpt(){toolRun++;CHAL_CACHE=null;if(toolOut&&toolOut.done<toolOut.total)toolOut=null;if(cmpOut&&cmpOut.done<cmpOut.total)cmpOut=null;
