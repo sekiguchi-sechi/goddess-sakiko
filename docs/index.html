@@ -135,6 +135,20 @@ footer.foot{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-i
 .rt-rules{margin:0;padding-left:22px}
 .rt-rules li{margin:3px 0}
 tr.rt-sure-first td{border-top:2px dashed var(--line)}
+
+/* 2026-10-30 UI整理: 古い結果・計算中・ヘルプ・アリーナの今日のルール・フリーとチャレンジの要約 */
+#result{transition:opacity .15s}
+#result.stale,#result.busy{opacity:.45}
+.stale-note{border:1px solid var(--accent);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--accent);background:var(--panel-2)}
+.help{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;cursor:help;align-self:center}
+.arena-today{border:1px solid var(--accent);border-radius:10px;padding:8px 12px;background:var(--panel-2);font-size:14px}
+.arena-today b{color:var(--accent)}
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.sumcard{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--panel)}
+.sumcard .k{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.sumcard .v{font-family:var(--f-mono);font-size:20px;font-weight:600}
+.sumcard .v .r{color:var(--accent);margin-right:6px}
+.sumcard .m{font-size:13px;margin-top:2px}
 </style>
 
 <header class="top">
@@ -795,7 +809,7 @@ function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
 }
 // 編成表（レア・キャラ・バンド・カード名・タイプ・スナップ）
-function teamTable(rows){const ord=rows.some(r=>r.ord);return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div><p class="note">★＝リーダー${ord?'。発動順はライブごとにランダムで、表の順になると最高スコアです':''}</p>`}
+function teamTable(rows){const ord=rows.some(r=>r.ord);return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
 const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,name:x.m.name,type:x.m.type,snap:x.s.none?'':x.s.name,snapType:x.s.type});
 function chip(t){return t?`<span class="chip t-${esc(t)}">${esc(t)}</span>`:''}
 function opts(list,val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+list.map(x=>{const[v,l]=Array.isArray(x)?x:[x,x];return`<option value="${esc(v)}"${String(v)===String(val)?' selected':''}>${esc(l)}</option>`}).join('')}
@@ -805,7 +819,7 @@ function curSong(){return state.songs.find(s=>s.id===state.ui.song)||state.songs
 function guidePanel(){
   const nm=state.members.length,ns=state.snaps.length,set=Object.values(state.settings.charaRankLv||{}).some(v=>v>1)||state.settings.vip>0;
   const st=(ok,t)=>`<li class="${ok?'done':''}">${ok?'✓ ':''}${t}</li>`;
-  const open=state.ui.guide!==false||!nm;
+  const open=!(nm>=5&&ns>=5)||state.ui.guide===true;
   return`<details class="panel guide" data-guide${open?' open':''}><summary><b>使い方</b>${nm?`<span class="muted">（メンバー${nm}枚・スナップ${ns}枚を登録済み）</span>`:''}</summary>
     <ol class="steps">
       ${st(nm>=5&&ns>=5,`<b>手持ちを登録する</b>：「メンバー」「スナップ」タブで、持っているカードの「所持」にチェックを入れ、Lv・特訓・覚醒などをゲームの詳細画面に合わせます。数値は自動で計算されます。`)}
@@ -828,6 +842,18 @@ function gkInputs(song,o,part){const st=state.settings,REQ=[['','指定なし'],
   if(kinds.has('COMBO'))h+=`<label class="f" title="COMBO 撃奏は区間内の COMBO 数で順位が決まります。メンバーの「撃奏COMBO獲得量UP」の合計が、手持ちで出せる最高（または2番目以上）の編成の中からスコア最大を選びます。COMBO 区間の無い曲では使いません">COMBO数<select id="gkComboReq">${opts(REQ,st.gkComboReq??(st.gkComboMax?'max':''))}</select></label>`;
   if(kinds.has('LUCK'))h+=`<label class="f" title="LUCK 撃奏は区間内の LUCK pt で順位が決まります。LUCK値＝LUCK のメンバーの撃奏スキルと、抽選に効く LUCK スナップが LUCK 区間に足すスコア（LUCK pt の代わり。スコアUP 系のスナップは含めません）。最高（または最高から1%以上下がる中で一番高い値以上）の編成の中からスコア最大を選びます。LUCK 区間の無い曲では使いません">LUCK値<select id="gkLuckReq">${opts(REQ,st.gkLuckReq||'')}</select></label>`;
   return h}
+// アリーナの今日のルール（入力欄の下に目立たせる）と次のルール
+function arenaTodayHtml(band){const R=arenaRule(band),L=typeof MY_DATA!=='undefined'?MY_DATA.arena?.reg?.[band]||[]:[],t=arenaClock()/1000,nx=L.filter(x=>x[0]>t).sort((a,b)=>a[0]-b[0])[0];
+  const tm=u=>new Date(u*1000).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'}),ty=x=>x==='all'?'ALL':x||'楽曲のまま';
+  return`<div class="arena-today"><span class="muted">今日の ${esc(band)}</span> <b>撃奏 ${esc(R.gk)}</b>・タイプ ${esc(ty(R.type))}${R.until?`<span class="muted">（${tm(R.until+1)}まで${R.manual?'・手動で変更中':''}）</span>`:''}${nx?` <span class="muted">→ 次は ${esc(nx[3])}・${esc(ty(nx[2]))}</span>`:''}</div>`}
+// 結果を出したときの条件。違えば「条件が変わりました」を出す（ブースト・消費倍率は結果の表示だけ変わるので含めない）
+function optKey(){const u=state.ui,st=state.settings,o=u.obj,song=curSong();
+  return JSON.stringify([o,u.song,(o==='ptTotal'||o==='itemTotal'||o==='chscore')?u.chSong:'',o==='arena'&&song?.band?arenaRule(song.band):'',st.margin,isGk(o)?[st.gkJust,st.gkJudgeN,st.gkComboReq,st.gkLuckReq]:''])}
+function paintStale(){const r=document.getElementById('result'),n=document.getElementById('staleNote');if(!r||!n)return;const s=!!(lastResult&&lastResult.key&&lastResult.key!==optKey());r.classList.toggle('stale',s);n.hidden=!s}
+// イベントpt・バッジの目的: フリー編成とチャレンジ編成の要約を先頭に並べる
+function sumHtml(R,P,e,song){const C=R.chal;if(!C)return'';const L=P.t.L,fm=e.slots.map((x,i)=>`${esc(x.m.chara)}${i===L?'★':''}`).join('・'),cm=C.slots.map(x=>`${esc(x.chara)}${x.lead?'★':''}`).join('・');
+  return`<div class="sumgrid"><div class="sumcard"><div class="k">フリー — ${esc(song.name)}</div><div class="v"><b class="r">${RANKS[P.rank]}</b> ${fmt(e.score)}</div><div class="m">${fm}</div></div>
+    <div class="sumcard"><div class="k">チャレンジ — ${esc(C.song)}</div><div class="v"><b class="r">${esc(C.rank)}</b> ${fmt(C.score)}</div><div class="m">${cm}</div></div></div>`}
 function viewOpt(){
   const song=curSong(),o=state.ui.obj;
   // 目的に関係する入力だけを出す（楽曲: チャレンジスコア以外、チャレンジ楽曲: 合計とチャレンジスコア、ブースト: 合計のみ、消費倍率: 合計とチャレンジスコア）
@@ -844,9 +870,11 @@ function viewOpt(){
       <label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
       ${isGk(o)?gkInputs(song,o,'req'):''}
       <button class="btn primary" id="run">最適編成を計算</button>
+      <span class="help" tabindex="0" title="推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}">?</span>
     </div>
-    <p class="note">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
+    ${o==='arena'&&song?.band?arenaTodayHtml(song.band):''}
   </section>
+  <div id="staleNote" class="stale-note" hidden>条件が変わりました。下の結果は前の条件のものです。「最適編成を計算」で計算し直してください。</div>
   <section id="result">${lastResult?renderResult():'<div class="panel muted">「最適編成を計算」を押すと結果がここに出ます。</div>'}</section>
   <div id="tools">${toolsHtml()}</div>
   </div>`;
@@ -897,7 +925,7 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     if(kids.length)h+=`<ul>${kids.map(x=>node([...pre,x.i],x.C,depth+1)).join('')}</ul>`;
     return h+'</li>'};
   const RR=retryRules(O,T,L,nm),m=v=>`${v.toFixed(1)}分`;
-  return`<details class="panel" data-retry${state.ui.retryOpen===false?'':' open'}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
+  return`<details class="panel" data-retry${state.ui.retryOpen===true?' open':''}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
     <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
     <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
     <h3 style="margin:10px 0 4px">覚えるルール</h3>
@@ -913,7 +941,7 @@ function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const
   const wAt=sec=>{const x=Math.min(Math.max((sec-5)*4,0),n-1),j=Math.floor(x),f=x-j;return[0,1,2,3,4].map(k=>f?W[j][k]*(1-f)+W[j+1][k]*f:W[j][k])};
   const w5=W[0],top=Math.max(...w5),bp=bestOrderPos(e);
   const rows=e.slots.map((x,i)=>{const len=(x.m.sec||0)+x.ext,a=wAt(len).map(w=>e.P*kf*x.m.sk*w);return{m:x.m,len,a,mx:Math.max(...a),best:bp?.[i]}});
-  return`<details class="panel" data-slotw${state.ui.slotWOpen===false?'':' open'}><summary><b>番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
+  return`<details class="panel" data-slotw${state.ui.slotWOpen===true?' open':''}><summary><b>番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
     <div class="tbl" style="margin-top:8px"><table><thead><tr><th></th>${[1,2,3,4,5].map(k=>`<th class="num">${k}番目</th>`).join('')}</tr></thead><tbody>
     <tr><td class="muted">重み（5秒のとき）</td>${w5.map(w=>`<td class="num">${w===top?'<b>':''}${w.toFixed(3)}${w===top?'</b>':''}</td>`).join('')}</tr>
     ${rows.map(r=>`<tr><td>${esc(r.m.chara)} <span class="muted">${Math.round(r.m.sk*100)}%・${+r.len.toFixed(2)}秒</span></td>${r.a.map((v,k)=>`<td class="num"${r.best===k+1?' style="color:var(--accent)"':''}>${v===r.mx?'<b>':''}+${fmt(v)}${v===r.mx?'</b>':''}</td>`).join('')}</tr>`).join('')}
@@ -926,6 +954,10 @@ function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,p
 // チャレンジライブはフリーで遊んだときの数字（1回あたり・獲得チャレンジpt）を省く
 function freeKpis(R,P,e){const st=state.settings,vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank)),o=R.obj;
   const ev=o==='ptTotal'||o==='itemTotal'||o==='chscore',showPt=ev&&o!=='itemTotal',showIt=ev&&o!=='ptTotal',freePlay=o==='ptTotal'||o==='itemTotal';
+  if(o==='arena')return`<div class="kpis">
+      <div class="kpi"><div class="k">推定スコア（区間すべて1位）</div><div class="v">${fmt(e.score)}</div></div>
+      <div class="kpi"><div class="k">全区間2位のとき</div><div class="v">${fmt(e.gkLose)}</div></div>
+      <div class="kpi"><div class="k">推定総合力</div><div class="v">${fmt(e.P)}</div></div></div>`;
   return`<div class="kpis">
       <div class="kpi"><div class="k">推定ランク</div><div class="v r">${RANKS[P.rank]}</div></div>
       <div class="kpi"><div class="k">推定スコア（平均）</div><div class="v">${fmt(e.score)}</div></div>
@@ -949,15 +981,19 @@ function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">�
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
 // 撃奏の指標と推定スコアの比較表（区間の種類ごと）。指標が高い順、どちらも負けている編成は除く
-function gkCmpHtml(R,P){const b=R.best.e,nm=t=>t.m.map(i=>esc(M[i]?.chara||'')).join('・');
+// 最適の編成から入れ替わるカード（メンバー・スナップ）。アリーナは同じバンドの5人になりやすいので、キャラ名より違いを出す
+function teamDiff(t,b){const ms=x=>x.m.map(i=>M[i]),ss=x=>x.s.map(i=>S[i]).filter(z=>z&&!z.none),out=[],key=z=>z.cid??z.name;
+  const d=(A,B,lab)=>{const a=new Set(A.map(key)),bb=new Set(B.map(key)),o=A.filter(z=>!bb.has(key(z))),n=B.filter(z=>!a.has(key(z)));if(o.length||n.length)out.push(`<span class="muted">${lab}</span> ${o.map(z=>`<s>${esc(z.name)}</s>`).join('・')} → ${n.map(z=>`<b>${esc(z.name)}</b>${z.chara?`<span class="muted">（${esc(z.chara)}）</span>`:''}`).join('・')}`)};
+  d(ms(b),ms(t),'メンバー');d(ss(b),ss(t),'スナップ');return out.length?out.join('<br>'):'<span class="muted">同じカード（並びだけ違う）</span>'}
+function gkCmpHtml(R,P){const b=R.best.e;
   const LBL={LUCK:['LUCK値','LUCK値の下限を手持ちの最高の100%〜50%で変えて','LUCK値が高いほど抽選で LUCK pt を稼ぎやすい'],
     COMBO:['COMBO上乗せ','撃奏COMBO獲得量の上乗せ合計の下限を最高から1ずつ下げて','上乗せが1多いと1ノーツごとのCOMBOが1多い'],
     JUST:['推定JUST率','判定幅スナップの枚数で決まる推定JUST率の下限を変えて','JUST率が高いほど区間のJUST数を稼ぎやすい']};
   return R.cmp.filter(c=>c.rows.length).map(c=>{const L=LBL[c.kind],show=v=>c.kind==='COMBO'?'+'+v:c.kind==='JUST'?Math.round(v)+'%':fmt(v);
     return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>${L[0]}と推定スコアの比較（${c.kind}）</b> <span class="muted">（${c.rows.length}件）</span></summary>
   <p class="note">${L[1]}、それぞれスコアが最大の編成を探しました（撃奏スキル持ちの人数の条件は残しています）。${L[2]}。推定スコアは区間1位をとれたときの値です。${c.rows.length===1?`<b>最適な編成が${L[0]}も手持ちの最高なので、比べる候補はありません。</b>`:''}</p>
-  <div class="tbl"><table><thead><tr><th class="num">${L[0]}</th><th class="num">${c.kind==='JUST'?'判定幅スナップ':'最高比'}</th>${c.kind==='JUST'?'<th class="num">JUSTスキル</th>':''}<th class="num">推定スコア</th><th class="num">スコア差</th><th>メンバー</th><th></th></tr></thead><tbody>
-  ${c.rows.map(({i,v})=>{const p=R.frontier[i];return`<tr class="${p===R.best?'best':''}"><td class="num"><b>${show(v)}</b></td><td class="num">${c.kind==='JUST'?(p.e.njc||0)+'枚':Math.round(v/c.max*100)+'%'}</td>${c.kind==='JUST'?`<td class="num">${(p.e.mk||{}).JUST||0}人</td>`:''}<td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td>${nm(p.t)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`}).join('')}
+  <div class="tbl"><table><thead><tr><th class="num">${L[0]}</th><th class="num">${c.kind==='JUST'?'判定幅スナップ':'最高比'}</th>${c.kind==='JUST'?'<th class="num">JUSTスキル</th>':''}<th class="num">推定スコア</th><th class="num">スコア差</th><th>最適の編成からの入れ替え</th><th></th></tr></thead><tbody>
+  ${c.rows.map(({i,v})=>{const p=R.frontier[i];return`<tr class="${p===R.best?'best':''}"><td class="num"><b>${show(v)}</b></td><td class="num">${c.kind==='JUST'?(p.e.njc||0)+'枚':Math.round(v/c.max*100)+'%'}</td>${c.kind==='JUST'?`<td class="num">${(p.e.mk||{}).JUST||0}人</td>`:''}<td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td style="font-size:12px">${p===R.best?'<span class="muted">—</span>':teamDiff(p.t,R.best.t)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`}).join('')}
   </tbody></table></div></details>`}).join('')}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
@@ -979,10 +1015,10 @@ function renderResult(){
     <p class="note">フリーライブ1回（LB${st.lb}）で：直接 ${fmt(direct)} ＋ チャレンジpt ${cp} → チャレンジライブ換算 ${fmt(cp*C.vpc)}（合計 ${fmt(direct+cp*C.vpc)}）。チャレンジpt 1あたり ${C.vpc.toFixed(1)}${isPt?'pt':'個'}。チャレンジライブではイベント対象カードの総合力がボーナス分上がります（パラメータボーナス）。</p>
     ${kpiBox(chalKpis(C))}
     ${teamTable(C.slots)}</div>`}
-  return`<div class="stack"><div class="panel stack">
+  return`<div class="stack">${sumHtml(R,P,e,song)}<div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
-    <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${isGk(R.obj)?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
+    ${R.obj==='arena'?'':`<p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>`}${isGk(R.obj)&&R.obj!=='arena'?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
     ${R.cbMax!=null?`<p class="note">COMBO数（撃奏COMBO獲得量の上乗せ合計）：<b>+${e.cb||0}</b>（手持ちの最高 +${R.cbMax}${R.cbReq==='second'?`、2番目 +${R.cbThr}`:''}）${R.cbThr!=null&&(e.cb||0)<R.cbThr?' <span class="warn">指定に届いていません（固定メンバーなどを確認してください）</span>':''}</p>`:''}
     ${R.jrMax!=null?`<p class="note">推定JUST率：<b>${Math.round(gkJustRate(e.nj))}%</b>（判定幅スナップ ${e.njc||0}枚・JUSTスキル ${(e.mk||{}).JUST||0}人、手持ちの最高 ${Math.round(R.jrMax)}%）</p>`:''}
     ${R.lkMax!=null?`<p class="note">LUCK値：<b>${fmt(e.lk||0)}</b>（手持ちの最高 ${fmt(R.lkMax)}${R.lkReq==='second'?`、2番目 ${fmt(R.lkThr)}`:''}）${(e.lk||0)<R.lkThr*(1-1e-9)?' <span class="warn">指定に届いていません</span>':''}</p>`:''}
@@ -1016,12 +1052,12 @@ function toolsHtml(){
     </tbody></table></div>`:(busy?'':`<p class="muted">1か所の育成で伸びる候補は見つかりませんでした。${valCol(T.obj)?'すでに推定ランクと最大ボーナスに届いていて、1か所の育成では値が変わらない状態です。':''}</p>`)}</section>`}
 // 全曲比較タブ: 目的を選んで全曲を最適化し、1回あたり・1分あたりで並べる
 function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o==='ptTotal'||o==='itemTotal',busy=cmpOut&&cmpOut.done<cmpOut.total;
-  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">全曲比較（周回効率）</h2>
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">全曲比較${perMin(o)?'（周回効率）':''}</h2>
     <div class="row">
       <label class="f">目的<select id="cmpObj">${opts(OBJECTIVES.map(x=>[x.id,x.label]),o)}</select></label>
       ${useCh?`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||state.songs[0])?.name||''))}</label>`:''}
-      <label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>
-      <label class="f">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>
+      ${perMin(o)?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
+      ${o==='arena'?'':`<label class="f">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>`}
       <button class="btn primary" data-act="cmpSongs"${busy?' disabled':''}>全曲を計算</button>
     </div>
     <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます。最適化タブで1曲ずつ計算したときと同じ編成・値になります。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
@@ -1032,13 +1068,13 @@ function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=b
   const F=cmpFilter(),bandOf=r=>r.band||'その他',all=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1)||(key==='val'&&perMin(T.obj)?(b.pm??-1)-(a.pm??-1):(b.val??-1)-(a.val??-1)));
   const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type)));
   const grp=(k,label,items,typed)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" data-cmpf="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" data-cmpf="${k}" data-v="">解除</button>`:''}</div>`;
-  const bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
+  const ar=T.obj==='arena',bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
   return`<section class="panel stack"><h3 style="margin:0">${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
     ${perMin(T.obj)?`<div class="row"><span class="muted">並べ替え</span><button class="fchip${key==='val'?' on':''}" data-act="cmpSortVal">1回あたり</button><button class="fchip${key==='pm'?' on':''}" data-act="cmpSortMin">1分あたり</button><span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span></div>`:''}
     <div class="fchips">${grp('band','バンド',bands)}${grp('type','タイプ',TYPES,true)}</div>
     ${F.band.length||F.type.length?`<p class="muted" style="margin:0">${all.length}曲中 ${rows.length}曲を表示</p>`:''}
-    <div class="tbl"><table><thead><tr><th>#</th><th>曲</th><th>推定ランク</th><th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
-    ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${r.err?`<td colspan="${3+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`<td><b>${RANKS[r.rank]}</b></td><td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
+    <div class="tbl"><table><thead><tr><th>#</th><th>曲</th>${ar?'<th>バンド</th><th>今日の撃奏</th>':'<th>推定ランク</th>'}<th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${ar?`<td>${esc(r.band)}</td><td>${(()=>{const R=arenaRule(r.band);return`<b>${esc(R.gk)}</b> <span class="muted">${R.type==='all'?'ALL':esc(R.type||'')}</span>`})()}</td>`:''}${r.err?`<td colspan="${(ar?2:3)+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`${ar?'':`<td><b>${RANKS[r.rank]}</b></td>`}<td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
     </tbody></table></div></section>`}
 function cmpFilter(){const u=state.ui;if(!u.cmpF||!Array.isArray(u.cmpF.band)||!Array.isArray(u.cmpF.type))u.cmpF={band:[],type:[]};return u.cmpF}
 function paintCmp(){const el=document.getElementById('cmp');if(el)el.innerHTML=cmpHtml();const b=document.querySelector('[data-act="cmpSongs"]');if(b)b.disabled=!!(cmpOut&&cmpOut.done<cmpOut.total)}
@@ -1311,6 +1347,7 @@ function render(){
   renderTabs();
   const v={opt:viewOpt,compare:viewCompare,members:viewMembers,snaps:viewSnaps,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
+  paintStale();
 }
 
 // JSON取り込み: 全体のバックアップ（songs と roster を含む）なら置き換え、それ以外は書いてある項目だけ上書き
@@ -1417,15 +1454,18 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   else return;
   save()},true);
 function runOpt(){toolRun++;CHAL_CACHE=null;if(toolOut&&toolOut.done<toolOut.total)toolOut=null;if(cmpOut&&cmpOut.done<cmpOut.total)cmpOut=null;
-  const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}
+  const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}document.getElementById('result')?.classList.add('busy');
   setTimeout(()=>{
     const song=curSong();
     if(!song){lastResult={error:'楽曲タブで曲を登録してください。'}}
-    else{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});lastResult={...r,obj:state.ui.obj}}
+    else{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});lastResult={...r,obj:state.ui.obj,key:optKey()}}
     shownIdx=null;save();render();
   },30);
 }
 
+
+// 条件を変えたら、出ている結果が古いことを示す
+document.addEventListener('change',()=>setTimeout(paintStale,0));
 // ===== 楽曲のコンボボックス（入力すれば検索、空欄なら全曲の一覧） =====
 const NO_CH='なし（チャレンジライブ無し）';
 function comboHtml(id,val){return`<span class="combo"><input id="${id}" class="songpick" value="${esc(val)}" data-prev="${esc(val)}" autocomplete="off" role="combobox" aria-expanded="false" placeholder="曲名を入力（空欄で一覧）"><button type="button" class="combo-btn" data-combo-btn="${id}" tabindex="-1" aria-label="一覧を開く">▾</button><span class="combo-list" role="listbox" hidden></span></span>`}
