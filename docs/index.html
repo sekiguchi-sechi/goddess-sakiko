@@ -151,6 +151,10 @@ tr.rt-sure-first td{border-top:2px dashed var(--line)}
 .sumcard .v{font-family:var(--f-mono);font-size:20px;font-weight:600}
 .sumcard .v .r{color:var(--accent);margin-right:6px}
 .sumcard .m{font-size:13px;margin-top:2px}
+/* ? のツールチップ: マウスのある端末は乗せると出る（タッチ端末は押すと下に説明が開く） */
+.helpwrap{position:relative;display:inline-flex;align-self:center}
+.helpwrap .tip{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:20;width:max-content;max-width:min(340px,80vw);padding:8px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--panel-2);color:var(--ink);font-size:12px;line-height:1.6;box-shadow:0 6px 20px rgba(0,0,0,.4);pointer-events:none}
+@media (hover:hover){.helpwrap:hover .tip,.helpwrap:focus-within .tip{display:block}}
 </style>
 
 <header class="top">
@@ -874,7 +878,7 @@ function viewOpt(){
       ${o==='arena'?'':`<label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>`}
       ${isGk(o)?gkInputs(song,o,'req'):''}
       <button class="btn primary" id="run">最適編成を計算</button>
-      <button type="button" class="help" data-help="optHelp" aria-expanded="false" aria-label="計算の前提">?</button>
+      <span class="helpwrap"><button type="button" class="help" data-help="optHelp" aria-expanded="false" aria-label="計算の前提" aria-describedby="optTip">?</button><span class="tip" role="tooltip" id="optTip">推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</span></span>
     </div>
     <p class="note helpbox" id="optHelp" hidden>推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
     ${o==='arena'&&song?.band?arenaTodayHtml(song.band):''}
@@ -1384,7 +1388,7 @@ document.addEventListener('click',e=>{
   const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=null;save();render();return}
   const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
-  const hp=e.target.closest('[data-help]');if(hp){const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
+  const hp=e.target.closest('[data-help]');if(hp){if(matchMedia('(hover:hover)').matches)return;const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
