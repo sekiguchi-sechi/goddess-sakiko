@@ -1148,7 +1148,8 @@ function startGrow(){
     if(growOut.done>=growOut.total){growOut.phase='done';CHAL_CACHE=null}paintGrow();if(growOut.done<growOut.total)setTimeout(stepJob,0)};
   setTimeout(stepBase,30)}
 // 行ごとの伸び: グループごとの平均（関係しない目的は0）と、アリーナで一番伸びる目的
-function growScore(r){const T=growOut.T,w=growW(),grp={};T.forEach((t,i)=>{(grp[t.grp]??=[]).push(r.g[i]||0)});
+// 計算できなかった目的（手持ちが足りないバンドのアリーナなど、元の値0）は平均に入れない
+function growScore(r){const T=growOut.T,w=growW(),grp={};T.forEach((t,i)=>{if(growOut.base[i]>0)(grp[t.grp]??=[]).push(r.g[i]||0)});
   const avg={};for(const g in grp)avg[g]=grp[g].reduce((a,b)=>a+b,0)/grp[g].length;
   let sw=0,s=0;for(const g in avg){s+=w[g]*avg[g];sw+=w[g]}
   let top=null;T.forEach((t,i)=>{if(t.grp==='ar'&&(r.g[i]||0)>(top?.v||0))top={v:r.g[i],t}});
@@ -1161,9 +1162,9 @@ function growHtml(){const G=growOut;if(!G)return'';if(G.err)return`<div class="p
   const chips=`<div class="fgroup"><span class="flabel">素材</span>${[['','すべて'],...Object.entries(GROW_CAT)].map(([k,l])=>`<button type="button" class="fchip${cat===k?' on':''}" data-gcat="${k}">${l}</button>`).join('')}</div>`;
   return`<section class="panel stack"><h3 style="margin:0">育成の優先度</h3>${prog}
     <p class="note">伸びは、育てた仮の手持ちで最適化し直したときの値の増え方です（イベントは pt、アリーナと撃奏ライブは推定スコア）。「総合」はグループごとの平均を重みで平均したもの。「最大まで」は複数段分の素材が要ります。素材の量・入手しやすさは考えていません。</p>
-    <details><summary class="muted">計算した目的（${G.T.length}件）</summary><p class="note">${G.T.map(t=>esc(t.label)).join('／')}</p></details>
+    <details><summary class="muted">計算した目的（${G.T.length}件）</summary><p class="note">${G.T.map((t,i)=>esc(t.label)+(G.base[i]>0||i>=G.base.length?'':'（計算できず）')).join('／')}</p></details>
     ${chips}
-    ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>育成</th><th class="num">総合</th>${grps.map(g=>`<th class="num">${GROW_GRP[g]}${g==='ar'?'（平均／一番伸びる所）':''}</th>`).join('')}</tr></thead><tbody>
+    ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>育成</th><th class="num">総合</th>${grps.map(g=>`<th class="num">${GROW_GRP[g]}${g==='ar'?'（平均／最大）':''}</th>`).join('')}</tr></thead><tbody>
     ${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.r.card)}${x.r.chara?`<span class="muted">（${esc(x.r.chara)}）</span>`:''}</td><td>${esc(x.r.up)}${x.r.max?' <span class="pill">最大まで</span>':''}</td><td class="num"><b>${pct(x.tot)}</b></td>${grps.map(g=>`<td class="num">${pct(x.avg[g])}${g==='ar'&&x.top?` <span class="muted">／${esc(x.top.t.band)} ${x.top.t.kind} ${pct(x.top.v)}</span>`:''}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div>`:(busy?'':'<p class="muted">育てて伸びる候補は見つかりませんでした。</p>')}</section>`}
 function paintGrow(){const el=document.getElementById('grow');if(el)el.innerHTML=growHtml();const b=document.querySelector('[data-act="grow"]');if(b)b.disabled=!!(growOut&&!growOut.err&&growOut.phase!=='done')}
