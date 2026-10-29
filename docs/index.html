@@ -1087,11 +1087,16 @@ function startCompare(){
   const chNames=state.event?.chSongs||[];
   const list=state.songs.filter(s=>isGk(obj)?s.gkTypes?.length&&(obj!=='arena'||s.band):obj==='chscore'&&chNames.length?chNames.some(n=>s.name.startsWith(n)):(s.thr?.SS>0));
   cmpOut={kind:'songs',obj,rows:[],done:0,total:list.length};CHAL_CACHE={};paintCmp();
-  const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
-    let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
-    const b=r.best;cmpOut.rows.push(b?{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,err:r.error||'どのランクにも届く編成がありません'});
+  const serial=()=>{const step=()=>{if(id!==toolRun)return;const s=list[cmpOut.done];
+    cmpOut.rows.push(cmpRow(s,obj));
     cmpOut.done++;if(cmpOut.done>=cmpOut.total)CHAL_CACHE=null;paintCmp();if(cmpOut.done<cmpOut.total)setTimeout(step,0)};
-  setTimeout(step,30)}
+    setTimeout(step,30)};
+  // 並列で計算できれば Worker で（68-pool.js）、できなければ1曲ずつ
+  if(canPool())parCompare(id,obj,list).then(ok=>{if(!ok&&id===toolRun)serial()});else serial()}
+const cmpErr=(s,msg)=>({id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,err:msg||'どのランクにも届く編成がありません'});
+// 1曲を最適化して比較の1行にする
+function cmpRow(s,obj){let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
+  const b=r.best;return b?{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:cmpErr(s,r.error)}
 // ===== 育成タブ（2026-10-30）: 遊ぶもの全体で「どのカードをどう育てると伸びるか」を並べる =====
 // 評価する目的（growTargets）: イベントpt（最適化タブの曲＋チャレンジ曲）、アリーナ（バンドごとの代表曲 × COMBO/LUCK/JUST）、撃奏ライブ（最適化タブの曲）。
 // 候補は「次の1段」と「最大まで」の両方。素材の種類（特訓・Lv／スキルLv／撃奏Lv／覚醒／上限解放）で絞り込める。
@@ -1137,20 +1142,29 @@ function growUps(k,cid){const R=state.roster[k][cid],out=[];if(!R?.own)return ou
     if(R.rk<n){add('sr',`上限解放 ${R.rk}→${R.rk+1}（Lv${c.rk[R.rk][0]}まで）`,x=>{x.rk++;x.lv=c.rk[x.rk-1][0]});if(R.rk+1<n)add('sr',`上限解放 ${R.rk}→${n}（Lv${c.rk[n-1][0]}まで）`,x=>{x.rk=n;x.lv=c.rk[n-1][0]},1)}
     else if(R.lv<c.rk[R.rk-1][0])add('tr',`Lv ${R.lv}→${c.rk[R.rk-1][0]}`,x=>{x.lv=c.rk[x.rk-1][0]})}
   return out}
+// 1つの目的の元の値と、育成の候補（f を除いた行の情報）。Worker でも使う
+function growBaseOne(T,t){const b=growSolve(T[t]),v=b.best?.val||0,ups=[];
+  if(v>0){const rel=growRel(T[t],b);for(const k of ['m','s'])for(const cid of rel[k])for(const u of growUps(k,cid)){const{f,...x}=u;ups.push(x)}}
+  return{v,ups,cc:CHAL_CACHE}}
+function growAddBase(t,r){growOut.base[t]=r.v||0;
+  for(const u of r.ups||[]){let row=growOut.rows.get(u.key);if(!row){const k=u.k,cid=u.cid;row={...u,card:(k==='m'?CM[cid]?.title:CSN[cid]?.title)||'',chara:k==='m'?CM[cid]?.chara||'':'',g:{}};growOut.rows.set(u.key,row)}growOut.jobs.push([u.key,t])}}
+// 候補1つ（key）を仮に育てて目的 t を計算し直した値。手持ちは元に戻す
+function growJob(T,key,t){const k=key[0],cid=key.slice(1,key.indexOf('|')),R=state.roster[k][cid];if(!R)return null;const keep=JSON.parse(JSON.stringify(R));
+  try{const u=growUps(k,cid).find(x=>x.key===key);if(!u)return null;u.f(state.roster[k][cid]);materialize();return growSolve(T[t]).best?.val||0}
+  catch(e){return null}finally{state.roster[k][cid]=keep;materialize()}}
 function startGrow(){
   const id=++toolRun,T=growTargets();if(!T.length){growOut={err:'評価する目的がありません（重みがすべて「使わない」か、曲が選ばれていません）。'};paintGrow();return}
-  CHAL_CACHE={};growOut={T,base:[],rows:new Map(),jobs:[],done:0,total:0,phase:'base'};paintGrow();
+  CHAL_CACHE={};growOut={T,base:[],rows:new Map(),jobs:[],done:0,total:T.length,phase:'base'};paintGrow();
   // 1) 各目的の元の値と、関係するカード → 2) 候補ごとに関係する目的だけ計算し直す
-  let ti=0;const stepBase=()=>{if(id!==toolRun)return;const t=T[ti],b=growSolve(t),v=b.best?.val||0;growOut.base.push(v);
-    if(v>0){const rel=growRel(t,b);for(const k of ['m','s'])for(const cid of rel[k])for(const u of growUps(k,cid)){let r=growOut.rows.get(u.key);if(!r){r={...u,card:(k==='m'?CM[cid]?.title:CSN[cid]?.title)||'',chara:k==='m'?CM[cid]?.chara||'':'',g:{}};growOut.rows.set(u.key,r)}growOut.jobs.push([u.key,ti])}}
-    ti++;growOut.done=ti;growOut.total=T.length;paintGrow();if(ti<T.length)setTimeout(stepBase,0);else{growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();setTimeout(stepJob,0)}};
+  const serial=()=>{let ti=0;const stepBase=()=>{if(id!==toolRun)return;growAddBase(ti,growBaseOne(T,ti));
+    ti++;growOut.done=ti;paintGrow();if(ti<T.length)setTimeout(stepBase,0);else{growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();setTimeout(stepJob,0)}};
   const stepJob=()=>{if(id!==toolRun){CHAL_CACHE=null;return}
     const end=Math.min(growOut.jobs.length,growOut.done+4);
-    for(;growOut.done<end;growOut.done++){const [key,t]=growOut.jobs[growOut.done],r=growOut.rows.get(key),keep=JSON.parse(JSON.stringify(state.roster[r.k][r.cid]));
-      try{r.f(state.roster[r.k][r.cid]);materialize();const v=growSolve(T[t]).best?.val||0,b=growOut.base[t];if(b>0)r.g[t]=v/b-1}catch(e){}
-      finally{state.roster[r.k][r.cid]=keep;materialize()}}
+    for(;growOut.done<end;growOut.done++){const [key,t]=growOut.jobs[growOut.done],v=growJob(T,key,t),b=growOut.base[t];if(v!=null&&b>0)growOut.rows.get(key).g[t]=v/b-1}
     if(growOut.done>=growOut.total){growOut.phase='done';CHAL_CACHE=null}paintGrow();if(growOut.done<growOut.total)setTimeout(stepJob,0)};
-  setTimeout(stepBase,30)}
+  setTimeout(stepBase,30)};
+  // 並列で計算できれば Worker で（68-pool.js）
+  if(canPool())parGrow(id,T).then(ok=>{if(!ok&&id===toolRun)serial()});else serial()}
 // 行ごとの伸び: グループごとの平均（関係しない目的は0）と、アリーナで一番伸びる目的
 // 計算できなかった目的（手持ちが足りないバンドのアリーナなど、元の値0）は平均に入れない
 function growScore(r){const T=growOut.T,w=growW(),grp={};T.forEach((t,i)=>{if(growOut.base[i]>0)(grp[t.grp]??=[]).push(r.g[i]||0)});
@@ -1216,6 +1230,78 @@ function idealUps(f){const I=idealRoster(f),R=state.roster;
     const s=r.scid!=null&&R.s[r.scid],si=s&&I.s[r.scid];
     if(s&&si){const x=[d('上限解放',s.rk,si.rk),d('Lv',s.lv,si.lv)].filter(Boolean);if(x.length)out.push('<span class="muted">スナップ</span> '+x.join('・'))}
     return out.length?out.join('<br>'):'<span class="muted">育成済み</span>'}}
+// ===== 並列計算（Web Worker、2026-10-30） =====
+// 同じスクリプト（APP_SRC。データ込み）を Worker で動かし、最適化の繰り返しをCPUのコアごとに分ける:
+//   全曲比較（曲ごと）・育成タブ（目的ごと・候補ごと）・理想編成（今の手持ちと理想を同時に）
+// 各計算は種（seedRnd）を固定しているので、1本で計算したときと同じ結果になる。
+// Worker が使えない環境（作れない・読み込めない・20秒で準備できない）では、今までどおり1本で計算する（POOL=false）。
+let POOL=null,poolGen=0;
+const WORKER_HEAD='var IS_WORKER=true,document={addEventListener(){},getElementById(){return null},querySelector(){return null},querySelectorAll(){return[]}};\n';
+const canPool=()=>POOL!==false&&typeof Worker!=='undefined'&&typeof APP_SRC==='string'&&APP_SRC.length>0;
+function poolReady(){
+  if(!canPool())return Promise.resolve(false);
+  if(POOL)return POOL.ready;
+  const n=Math.max(1,Math.min(8,((typeof navigator!=='undefined'&&navigator.hardwareConcurrency)||4)-1));
+  let url;try{url=URL.createObjectURL(new Blob([WORKER_HEAD,APP_SRC],{type:'text/javascript'}))}catch(e){POOL=false;return Promise.resolve(false)}
+  const ws=[],P={ws,n:0};POOL=P;
+  P.ready=new Promise(res=>{let ok=0,bad=0,fin=false;
+    const check=()=>{if(fin||ok+bad<n)return;fin=true;P.ws=ws.filter(w=>w.ok);P.n=P.ws.length;
+      if(!P.n){POOL=false;ws.forEach(w=>w.terminate());res(false)}else res(true)};
+    for(let i=0;i<n;i++){let w;try{w=new Worker(url)}catch(e){bad++;continue}ws.push(w);
+      w.onmessage=e=>{if(e.data&&e.data.ready&&!w.ok&&!w.dead){w.ok=1;ok++;check()}};
+      w.onerror=()=>{if(!w.ok&&!w.dead){w.dead=1;bad++;check()}}}
+    check();
+    setTimeout(()=>{if(fin)return;for(const w of ws)if(!w.ok&&!w.dead){w.dead=1;w.terminate();bad++}check()},20000)});
+  return P.ready}
+// 計算に使う状態（手持ち・設定・曲・イベント・画面の選択）と、チャレンジ編成の控え、アリーナの時刻
+const poolInit=()=>({state:JSON.parse(JSON.stringify(state)),cc:CHAL_CACHE?JSON.parse(JSON.stringify(CHAL_CACHE)):null,clock:arenaClock()});
+// jobs を空いた Worker に1件ずつ渡す。onRes(i, 結果)。別の計算が始まったら（toolRun が変わったら）配るのをやめて終える
+function poolRun(init,jobs,onRes,id){const ws=POOL.ws,gen=++poolGen,N=jobs.length;
+  return new Promise(res=>{if(!N)return res();let next=0,done=0,end=false;
+    const fin=()=>{if(!end){end=true;res()}};
+    const feed=w=>{if(next<N&&id===toolRun){w.cur=next;w.postMessage({gen,i:next,job:jobs[next++]})}};
+    const got=(w,i,r)=>{if(end)return;try{onRes(i,r||{})}catch(_){}done++;if(id!==toolRun||done>=N)return fin();feed(w)};
+    for(const w of ws){w.onmessage=e=>{const d=e.data;if(d&&d.gen===gen)got(w,d.i,d.r)};
+      w.onerror=e=>{e.preventDefault?.();got(w,w.cur,{error:'計算スレッドでエラー'})};
+      w.postMessage({gen,init});feed(w)}})}
+// ----- Worker 側 -----
+function workerMain(){let T=null;
+  self.onmessage=e=>{const d=e.data;
+    if(d.init){state=d.init.state;materialize();CHAL_CACHE=d.init.cc||null;const c=d.init.clock;arenaClock=()=>c;T=null;return}
+    const j=d.job;let r;
+    try{
+      if(j.type==='cmp')r=cmpRow(state.songs.find(x=>x.id===j.sid),j.obj);
+      else if(j.type==='gbase'){T||=growTargets();r=growBaseOne(T,j.t)}
+      else if(j.type==='grow'){T||=growTargets();r={v:growJob(T,j.key,j.t)}}
+      else if(j.type==='opt'){const song=curSong(),go=()=>{seedRnd(12345);const x=solve(song,state.ui.obj,{gkCmp:true});return{...x,ctx:[M,S,CTX]}};r=j.ideal?withIdeal(go):go()}
+    }catch(err){r={error:String(err&&err.message||err)}}
+    self.postMessage({gen:d.gen,i:d.i,r})};
+  self.postMessage({ready:true})}
+// ----- 並列版の各ツール（失敗したら false を返し、呼び出し側が1本の計算に切り替える） -----
+async function parCompare(id,obj,list){if(!(await poolReady()))return false;if(id!==toolRun)return true;
+  const R=new Array(list.length);let t=0;
+  await poolRun(poolInit(),list.map(s=>({type:'cmp',sid:s.id,obj})),(i,r)=>{R[i]=r.error&&!r.name?cmpErr(list[i],r.error):r;cmpOut.rows=R.filter(Boolean);cmpOut.done++;
+    if(Date.now()-t>150||cmpOut.done>=cmpOut.total){t=Date.now();paintCmp()}},id);
+  if(id===toolRun){cmpOut.rows=R.filter(Boolean);CHAL_CACHE=null;paintCmp()}return true}
+async function parGrow(id,T){if(!(await poolReady()))return false;if(id!==toolRun)return true;
+  let t=0;const paint=()=>{if(Date.now()-t>150||growOut.done>=growOut.total){t=Date.now();paintGrow()}};
+  // 1) 各目的の元の値と候補
+  const B=new Array(T.length);
+  await poolRun(poolInit(),T.map((_,i)=>({type:'gbase',t:i})),(i,r)=>{B[i]=r;growOut.done++;paint()},id);if(id!==toolRun)return true;
+  for(let i=0;i<T.length;i++){const r=B[i]||{};if(r.cc)CHAL_CACHE=Object.assign(CHAL_CACHE||{},r.cc);growAddBase(i,r)}
+  // 2) 候補ごとに関係する目的だけ計算し直す
+  growOut.phase='cand';growOut.done=0;growOut.total=growOut.jobs.length;paintGrow();
+  const J=growOut.jobs;
+  await poolRun(poolInit(),J.map(([key,i])=>({type:'grow',key,t:i})),(i,r)=>{const[key,ti]=J[i],row=growOut.rows.get(key),b=growOut.base[ti];if(r.v!=null&&b>0)row.g[ti]=r.v/b-1;growOut.done++;paint()},id);
+  if(id===toolRun){growOut.phase='done';CHAL_CACHE=null;paintGrow()}return true}
+// 理想編成: 理想の手持ちは Worker、今の手持ち（無ければ）はこちらで同時に計算する
+async function parIdeal(id,song){if(!(await poolReady()))return false;if(id!==toolRun)return true;
+  let ideal=null;const p=poolRun(poolInit(),[{type:'opt',ideal:true}],(i,r)=>{ideal=r},id);
+  await new Promise(r=>setTimeout(r,0));
+  if(!lastResult||lastResult.key!==optKey()){seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});lastResult={...r,obj:state.ui.obj,key:optKey(),ctx:[M,S,CTX]};shownIdx=null}
+  await p;if(id!==toolRun)return true;
+  idealRes=ideal&&!ideal.error?{...ideal,obj:state.ui.obj,key:idealKey(),idealF:idealF()}:{error:'計算できませんでした（'+(ideal?.error||'不明')+'）'};idealShown=null;
+  return true}
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
 const n5=[1,2,3,4,5];
 // 絞り込み: バンド・レア度・タイプは複数選択（空＝すべて）。旧形式（1つの文字列）は配列に直す
@@ -1555,7 +1641,11 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(!d.matches)return;
   save()},true);
 function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")growOut=null;if(cmpOut&&cmpOut.done<cmpOut.total)cmpOut=null;
   const btn=document.getElementById('run');if(btn){btn.disabled=true;btn.textContent='計算中…'}document.getElementById('result')?.classList.add('busy');
-  setTimeout(()=>{
+  const run=toolRun,song0=curSong();
+  // 理想編成は、理想の手持ちを Worker で、今の手持ちをこちらで同時に計算する（68-pool.js）
+  if(state.ui.tab==='ideal'&&song0&&canPool()){parIdeal(run,song0).then(ok=>{if(run!==toolRun)return;if(ok){save();render()}else serial()});return}
+  serial();
+  function serial(){setTimeout(()=>{
     const song=curSong(),id=state.ui.tab==='ideal';
     if(!song){const e={error:'楽曲タブで曲を登録してください。'};if(id)idealRes=e;else lastResult=e}
     else{const go=k=>{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});return{...r,obj:state.ui.obj,key:k,ctx:[M,S,CTX]}};
@@ -1563,7 +1653,7 @@ function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")g
       if(id){if(!lastResult||lastResult.key!==optKey()){lastResult=go(optKey());shownIdx=null}idealRes={...withIdeal(()=>go(idealKey())),idealF:idealF()};idealShown=null}
       else{lastResult=go(optKey());shownIdx=null}}
     save();render();
-  },30);
+  },30)}
 }
 
 
@@ -1608,6 +1698,8 @@ document.addEventListener('keydown',e=>{const t=e.target;if(!t.classList?.contai
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(list.hidden)comboOpen(t,t.value);if(!os.length)return;k=e.key==='ArrowDown'?Math.min(os.length-1,k+1):Math.max(0,k-1);os.forEach((o,i)=>o.classList.toggle('on',i===k));os[k].scrollIntoView({block:'nearest'})}
   else if(e.key==='Enter'){e.preventDefault();const o=os[k>=0?k:0];if(o)comboPick(t,o.dataset.v)}
   else if(e.key==='Escape'){comboClose(t,true);t.blur()}});
-load();render();
+// 並列計算の Worker は、このスクリプト全体（データ込み）をそのまま動かす（68-pool.js）
+const APP_SRC=typeof IS_WORKER==='undefined'&&typeof document!=='undefined'&&document.currentScript&&typeof document.currentScript.textContent==='string'?document.currentScript.textContent:'';
+if(typeof IS_WORKER!=='undefined')workerMain();else{load();render()}
 </script>
 </body></html>
