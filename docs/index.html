@@ -395,6 +395,8 @@ function arenaSong(song){const R=arenaRule(song.band),k=GK_CODE[R.gk],A=(typeof 
       const w=hi[0]>lo[0]?(x-lo[0])/(hi[0]-lo[0]):0;tab.push(lo[1].map((row,s)=>row.map((y,j)=>y+(hi[1][s][j]-y)*Math.min(1,Math.max(0,w)))))}
     vg[base]=tab}
   return{...song,type:R.type||song.type,gkTypes:[R.gk,R.gk,R.gk],gk2:{...song.gk2,b:b*100,r,v,vg,metric,kindName:R.gk},gkf:MY_DATA.arena.gkf?.[song.name]?.[k]??1,arena:R}}
+// 推定JUST率（%）: gk2 モデルと同じ式。判定幅スナップ（区間全体）の重み付き枚数 nj で上がる
+function gkJustRate(nj){const st=state.settings;return Math.min(1,Math.pow(st.gk2A0??(st.gkJust??20)/100,st.gk2G??0.88)+(st.gk2A1??0.15)*(nj||0))*100}
 // LUCK値: LUCK 区間（r[0]=2）で、LUCK のメンバーの撃奏スキルと、抽選に効く LUCK の撃奏スナップ（スコアUP%を持たないもの）が足す区間スコアの合計
 // （総合力30万あたり、レベルの係数込み）。haneoka エンジンは LUCK pt を返さないので、抽選の結果で伸びる区間スコアを LUCK pt の代わりに使う
 function luckValue(G,t){const L=[];G.r.forEach((r,i)=>{if(r[0]===2)L.push(i)});if(!L.length)return 0;const LVL=[.45,.55,.64,.73,1];let x=0;
@@ -701,7 +703,7 @@ function solve(song,obj,opt={}){
   if(obj==='score'||obj==='maxscore'||obj==='chscore'||isGk(obj)||obj==='power'){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
-    let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,fCmp=null;CTX.needLk=false;
+    let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,jrMax=null,fCmp=null;CTX.needLk=false;
     // 撃奏COMBO獲得量の上乗せの合計の最大（固定メンバーを入れたうえで、キャラ重複不可ならキャラごとに1枚）
     const comboMax=()=>{const fixed=M.filter(m=>m.lock),rest=M.filter(m=>!m.lock).sort((a,b)=>(b.cb||0)-(a.cb||0)),used=new Set(fixed.map(m=>m.chara));let sum=fixed.reduce((x,m)=>x+(m.cb||0),0),n=fixed.length;
       for(const m of rest){if(n>=5)break;if(state.settings.uniqueChara&&used.has(m.chara))continue;used.add(m.chara);sum+=m.cb||0;n++}return sum};
@@ -728,12 +730,15 @@ function solve(song,obj,opt={}){
     const t=optimizeF(f);
     // LUCK値は指定なしでも表示する（LUCK 区間のある撃奏の曲）。手持ちの最高は探索のあとに求める（探索の乱数の順を変えない）
     if(isGk(obj)&&lkMax==null&&(song.gkTypes||[]).includes('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;CTX.needLk=false}
+    // COMBO数・JUST率も指定なしで表示する（COMBO の最高は計算だけで出る。JUST率の最高は探索のあと）
+    if(isGk(obj)&&cbMax==null&&(song.gkTypes||[]).includes('COMBO'))cbMax=comboMax();
+    if(isGk(obj)&&(song.gkTypes||[]).includes('JUST'))jrMax=gkJustRate(evq(optimizeF(e=>e.nj||0)).nj);
     const best=pack(t);
     // 撃奏の指標とスコアの比較（最適化タブの実行時だけ）: 区間の種類ごとに、指標の下限を段階的に変えてスコア最大を探し、どちらも負けている編成を除いて並べる
     //   LUCK: LUCK値（最高の100%〜50%）／COMBO: 撃奏COMBO獲得量の上乗せ合計（最高から1ずつ）／JUST: 推定JUST率（判定幅スナップの枚数で決まる）
     let cmp=null,front=[];
     if(opt.gkCmp&&isGk(obj)&&fCmp){cmp=[];const st=state.settings,best0=best;
-      const jr=e=>Math.min(1,Math.pow(st.gk2A0??(st.gkJust??20)/100,st.gk2G??0.88)+(st.gk2A1??0.15)*(e.nj||0))*100;
+      const jr=e=>gkJustRate(e.nj);
       for(const kind of [...new Set(song.gkTypes||[])]){
         const met=kind==='LUCK'?e=>e.lk||0:kind==='COMBO'?e=>e.cb||0:jr;CTX.needLk=kind==='LUCK';
         const mx=kind==='COMBO'?comboMax():met(evq(optimizeF(met))),bv=met(evq(t));if(!(mx>0))continue;
@@ -745,7 +750,7 @@ function solve(song,obj,opt={}){
         const ps=[...seen.values()].map(p=>({p,v:met(p.e)}));CTX.needLk=false;
         const rows=ps.filter(a=>a.p===best0||!ps.some(b=>b!==a&&b.v>=a.v-1e-6&&b.p.e.score>=a.p.e.score-1e-6&&(b.v>a.v+1e-6||b.p.e.score>a.p.e.score+1e-6))).sort((a,b)=>b.v-a.v||b.p.e.score-a.p.e.score);
         cmp.push({kind,max:mx,rows:rows.map(r=>{front.push(r.p);return{i:front.length-1,v:r.v}})})}}
-    return{best,frontier:front,cmp,chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
+    return{best,frontier:front,cmp,chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,jrMax,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
   const frontier=[];let topT=null;
@@ -978,7 +983,8 @@ function renderResult(){
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
     <p class="note">${(()=>{const up=rankRaw(e.ord?e.ord[e.ord.length-1].s:e.hi,song),mid=rankRaw(e.score,song);return up>P.rank?`発動順が良ければ ${RANKS[up]}${mid>P.rank?`（予想どおりなら ${RANKS[mid]}）`:''} に届きます。`:''})()}${nextThr?`確実に次のランクに届くには、推定スコアをあと約 ${fmt(nextThr/lowF()-e.score)} 上げる必要があります。`:''}</p>${isGk(R.obj)?`<p class="note">予想 1位 ${fmt(e.score)}／全区間2位 ${fmt(e.gkLose)}</p>`:''}</details>
-    ${R.cbMax!=null?`<p class="note">COMBO数（撃奏COMBO獲得量の上乗せ合計）：<b>+${e.cb||0}</b>（手持ちの最高 +${R.cbMax}${R.cbReq==='second'?`、2番目 +${R.cbThr}`:''}）${(e.cb||0)<R.cbThr?' <span class="warn">指定に届いていません（固定メンバーなどを確認してください）</span>':''}</p>`:''}
+    ${R.cbMax!=null?`<p class="note">COMBO数（撃奏COMBO獲得量の上乗せ合計）：<b>+${e.cb||0}</b>（手持ちの最高 +${R.cbMax}${R.cbReq==='second'?`、2番目 +${R.cbThr}`:''}）${R.cbThr!=null&&(e.cb||0)<R.cbThr?' <span class="warn">指定に届いていません（固定メンバーなどを確認してください）</span>':''}</p>`:''}
+    ${R.jrMax!=null?`<p class="note">推定JUST率：<b>${Math.round(gkJustRate(e.nj))}%</b>（判定幅スナップ ${e.njc||0}枚・JUSTスキル ${(e.mk||{}).JUST||0}人、手持ちの最高 ${Math.round(R.jrMax)}%）</p>`:''}
     ${R.lkMax!=null?`<p class="note">LUCK値：<b>${fmt(e.lk||0)}</b>（手持ちの最高 ${fmt(R.lkMax)}${R.lkReq==='second'?`、2番目 ${fmt(R.lkThr)}`:''}）${(e.lk||0)<R.lkThr*(1-1e-9)?' <span class="warn">指定に届いていません</span>':''}</p>`:''}
     ${R.arena?`<p class="note"><b>アリーナのルール（${esc(song.band||'')}）：タイプ ${R.arena.type==='all'?'ALL':esc(R.arena.type||song.type)}${R.arena.type?'':'（楽曲のまま）'}／撃奏区間 ${R.arena.gk} ×3</b></p>`:isGk(R.obj)?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
