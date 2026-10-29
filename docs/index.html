@@ -140,7 +140,9 @@ tr.rt-sure-first td{border-top:2px dashed var(--line)}
 #result{transition:opacity .15s}
 #result.stale,#result.busy{opacity:.45}
 .stale-note{border:1px solid var(--accent);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--accent);background:var(--panel-2)}
-.help{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;cursor:help;align-self:center}
+.help{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;align-self:center}
+.help:hover,.help[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+.helpbox{border-left:2px solid var(--accent);padding:4px 10px;margin:0}
 .arena-today{border:1px solid var(--accent);border-radius:10px;padding:8px 12px;background:var(--panel-2);font-size:14px}
 .arena-today b{color:var(--accent)}
 .sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
@@ -872,8 +874,9 @@ function viewOpt(){
       ${o==='arena'?'':`<label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>`}
       ${isGk(o)?gkInputs(song,o,'req'):''}
       <button class="btn primary" id="run">最適編成を計算</button>
-      <span class="help" tabindex="0" title="推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}">?</span>
+      <button type="button" class="help" data-help="optHelp" aria-expanded="false" aria-label="計算の前提">?</button>
     </div>
+    <p class="note helpbox" id="optHelp" hidden>推定スコアはオールパーフェクト（AP）を前提にしています。ミスやGREATが出やすい曲では実際のスコアが下がるので、「ランク判定の余裕」を増やしてください。${isGk(o)?'撃奏は区間すべて1位の前提で、LUCKは抽選、JUSTは自分の精度で上下します。':''}</p>
     ${o==='arena'&&song?.band?arenaTodayHtml(song.band):''}
   </section>
   <div id="staleNote" class="stale-note" hidden>条件が変わりました。下の結果は前の条件のものです。「最適編成を計算」で計算し直してください。</div>
@@ -1381,6 +1384,7 @@ document.addEventListener('click',e=>{
   const del=e.target.closest('[data-del]');if(del){const tr=del.closest('tr');const L=listOf(tr.dataset.kind);const i=L.findIndex(x=>x.id===tr.dataset.id);if(i>=0)L.splice(i,1);lastResult=null;save();render();return}
   const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
+  const hp=e.target.closest('[data-help]');if(hp){const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
