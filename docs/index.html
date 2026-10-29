@@ -156,6 +156,8 @@ tr.rt-sure-first td{border-top:2px dashed var(--line)}
 .helpwrap .tip{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:20;width:max-content;max-width:min(340px,80vw);padding:8px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--panel-2);color:var(--ink);font-size:12px;line-height:1.6;box-shadow:0 6px 20px rgba(0,0,0,.4);pointer-events:none}
 @media (hover:hover){.helpwrap:hover .tip,.helpwrap:focus-within .tip{display:block}}
 .kpi .v .rr{font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
+
+.grow-up{font-size:12px;line-height:1.5;min-width:150px}
 </style>
 
 <header class="top">
@@ -831,8 +833,8 @@ function renderTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('');
 }
 // 編成表（レア・キャラ・バンド・カード名・タイプ・スナップ）
-function teamTable(rows){const ord=rows.some(r=>r.ord);return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
-const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,name:x.m.name,type:x.m.type,snap:x.s.none?'':x.s.name,snapType:x.s.type});
+function teamTable(rows,ideal){const ord=rows.some(r=>r.ord),gu=ideal?idealUps(ideal):null;return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${gu?'<th>育成（手持ち→最大）</th>':''}${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td>${r.lead?'<b style="color:var(--accent)">★</b>':''}</td><td>${esc(r.rarity)}</td><td><b>${esc(r.chara)}</b></td><td>${esc(r.band)}</td><td>${esc(r.name)}</td><td>${chip(r.type)}</td><td>${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${gu?`<td class="grow-up">${gu(r)}</td>`:''}${ord?`<td class="num">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
+const slotRow=(x,lead)=>({lead,rarity:x.m.rarity,chara:x.m.chara,band:x.m.band,name:x.m.name,type:x.m.type,snap:x.s.none?'':x.s.name,snapType:x.s.type,mcid:x.m.cid,scid:x.s.none?null:x.s.cid});
 function chip(t){return t?`<span class="chip t-${esc(t)}">${esc(t)}</span>`:''}
 function opts(list,val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+list.map(x=>{const[v,l]=Array.isArray(x)?x:[x,x];return`<option value="${esc(v)}"${String(v)===String(val)?' selected':''}>${esc(l)}</option>`}).join('')}
 function charaOpts(val,blank){return(blank!==undefined?`<option value="">${blank}</option>`:'')+BAND_NAMES.map(b=>`<optgroup label="${esc(b)}">${BANDS[b].map(c=>`<option${c===val?' selected':''}>${c}</option>`).join('')}</optgroup>`).join('')}
@@ -1018,7 +1020,7 @@ function renderResult(){
   const e=ev({...P.t,detail:true});const objLabel=OBJECTIVES.find(o=>o.id===R.obj)?.label||'';
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
-  const bp=bestOrderPos(e),slots=teamTable(e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})));
+  const bp=bestOrderPos(e),slots=teamTable(e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})),R.idealF);
   // 到達ランク別の候補（イベントpt・バッジ）は最適の編成より少ない候補を並べるだけなので出さない（2026-10-30）
   const fr=R.cmp?gkCmpHtml(R,P):'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
@@ -1026,7 +1028,7 @@ function renderResult(){
   if(C){
     chalHtml=`<div class="panel stack"><h2>チャレンジ — ${esc(C.song)}</h2>
     ${kpiBox(chalKpis(C))}
-    ${teamTable(C.slots)}</div>`}
+    ${teamTable(C.slots,R.idealF)}</div>`}
   return`<div class="stack"><div class="panel stack">
     <h2>${R.chal?'フリー':esc(objLabel)}${shownIdx!=null&&R.frontier[shownIdx]!==R.best?'（比較表示）':''} — ${esc(song.name)}</h2>
     <details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${freeKpis(R,P,e)}
@@ -1182,7 +1184,7 @@ function viewGrowth(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&
 let idealRes=null,idealShown=null;
 const IDEAL_F=[['tr','特訓'],['lv','レベル'],['sl','ライブスキルLv'],['gl','撃奏スキルLv'],['rk','覚醒（スナップは上限解放）']];
 const idealF=()=>({tr:true,lv:true,sl:true,gl:true,rk:true,...(state.ui.idealF||{})});
-function idealRoster(){const f=idealF(),R=JSON.parse(JSON.stringify(state.roster||{m:{},s:{}}));
+function idealRoster(f=idealF()){const R=JSON.parse(JSON.stringify(state.roster||{m:{},s:{}}));
   for(const id in R.m){const r=R.m[id],c=CM[id];if(!r.own||!c)continue;
     if(f.tr)r.tr=c.lim.length;if(f.lv)r.lv=c.lim[r.tr-1];if(f.rk)r.rk=5;if(f.sl)r.sl=5;if(f.gl&&c.geki)r.gl=5;clampR('m',c,r)}
   for(const id in R.s){const r=R.s[id],c=CSN[id];if(!r.own||!c)continue;
@@ -1206,6 +1208,14 @@ function viewIdeal(){return inTab(()=>{let h=viewOpt();
   if(I&&I.best&&O&&O.best&&O.key===optKey()&&I.key===idealKey()){const a=O.best.val,b=I.best.val,lab=OBJECTIVES.find(o=>o.id===I.obj)?.label||'';
     h=h.replace('<section id="result"',`<div class="panel note">今の手持ちの最適（${esc(lab)}）：<b>${fmt(Math.round(a))}</b> → 理想：<b>${fmt(Math.round(b))}</b>${a>0?`（${b>=a?'+':''}${((b/a-1)*100).toFixed(1)}%）`:''}</div><section id="result"`)}
   return h})}
+// 理想編成の表: 手持ちから最大にした項目を「手持ち→最大」で出す（メンバーの行にスナップの分も）
+function idealUps(f){const I=idealRoster(f),R=state.roster;
+  const d=(l,a,b)=>a!==b?`${l} ${a}→${b}`:'';
+  return r=>{const out=[],m=R.m[r.mcid],mi=I.m[r.mcid];
+    if(m&&mi){const x=[d('特訓',m.tr,mi.tr),d('Lv',m.lv,mi.lv),d('覚醒',m.rk,mi.rk),d('スキルLv',m.sl,mi.sl),d('撃奏Lv',m.gl||1,mi.gl||1)].filter(Boolean);if(x.length)out.push(x.join('・'))}
+    const s=r.scid!=null&&R.s[r.scid],si=s&&I.s[r.scid];
+    if(s&&si){const x=[d('上限解放',s.rk,si.rk),d('Lv',s.lv,si.lv)].filter(Boolean);if(x.length)out.push('<span class="muted">スナップ</span> '+x.join('・'))}
+    return out.length?out.join('<br>'):'<span class="muted">育成済み</span>'}}
 // ===== メンバー・スナップ（全カード。所持にチェックしたものだけ編成に使う） =====
 const n5=[1,2,3,4,5];
 // 絞り込み: バンド・レア度・タイプは複数選択（空＝すべて）。旧形式（1つの文字列）は配列に直す
@@ -1550,7 +1560,7 @@ function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")g
     if(!song){const e={error:'楽曲タブで曲を登録してください。'};if(id)idealRes=e;else lastResult=e}
     else{const go=k=>{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});return{...r,obj:state.ui.obj,key:k,ctx:[M,S,CTX]}};
       // 理想編成では、今の手持ちの結果が同じ条件で無ければ一緒に計算する（差を出すため。最適化タブの結果にもなる）
-      if(id){if(!lastResult||lastResult.key!==optKey()){lastResult=go(optKey());shownIdx=null}idealRes=withIdeal(()=>go(idealKey()));idealShown=null}
+      if(id){if(!lastResult||lastResult.key!==optKey()){lastResult=go(optKey());shownIdx=null}idealRes={...withIdeal(()=>go(idealKey())),idealF:idealF()};idealShown=null}
       else{lastResult=go(optKey());shownIdx=null}}
     save();render();
   },30);
