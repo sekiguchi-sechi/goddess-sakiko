@@ -1234,7 +1234,7 @@ function idealUps(f){const I=idealRoster(f),R=state.roster;
 // 同じスクリプト（APP_SRC。データ込み）を Worker で動かし、最適化の繰り返しをCPUのコアごとに分ける:
 //   全曲比較（曲ごと）・育成タブ（目的ごと・候補ごと）・理想編成（今の手持ちと理想を同時に）
 // 各計算は種（seedRnd）を固定しているので、1本で計算したときと同じ結果になる。
-// Worker が使えない環境（作れない・読み込めない・20秒で準備できない）では、今までどおり1本で計算する（POOL=false）。
+// Worker が使えない環境（作れない・読み込めない・8秒で準備できない）では、今までどおり1本で計算する（POOL=false）。
 let POOL=null,poolGen=0;
 const WORKER_HEAD='var IS_WORKER=true,document={addEventListener(){},getElementById(){return null},querySelector(){return null},querySelectorAll(){return[]}};\n';
 const canPool=()=>POOL!==false&&typeof Worker!=='undefined'&&typeof APP_SRC==='string'&&APP_SRC.length>0;
@@ -1251,7 +1251,7 @@ function poolReady(){
       w.onmessage=e=>{if(e.data&&e.data.ready&&!w.ok&&!w.dead){w.ok=1;ok++;check()}};
       w.onerror=()=>{if(!w.ok&&!w.dead){w.dead=1;bad++;check()}}}
     check();
-    setTimeout(()=>{if(fin)return;for(const w of ws)if(!w.ok&&!w.dead){w.dead=1;w.terminate();bad++}check()},20000)});
+    setTimeout(()=>{if(fin)return;for(const w of ws)if(!w.ok&&!w.dead){w.dead=1;w.terminate();bad++}check()},8000)});
   return P.ready}
 // 計算に使う状態（手持ち・設定・曲・イベント・画面の選択）と、チャレンジ編成の控え、アリーナの時刻
 const poolInit=()=>({state:JSON.parse(JSON.stringify(state)),cc:CHAL_CACHE?JSON.parse(JSON.stringify(CHAL_CACHE)):null,clock:arenaClock()});
