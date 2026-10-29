@@ -676,7 +676,7 @@ function canon(t){const idx=[0,1,2,3,4].sort((a,b)=>(b===t.L)-(a===t.L)||t.m[a]-
   return{...t,m:idx.map(i=>t.m[i]),s:idx.map(i=>t.s[i]),lm:idx.map(i=>t.lm[i]),ls:idx.map(i=>t.ls[i]),L:0}}
 // 楽曲比較・育成優先度で同じチャレンジ編成を何度も探さないための一時キャッシュ（ツール実行中だけ使う）
 let CHAL_CACHE=null;
-function solve(song,obj){
+function solve(song,obj,opt={}){
   // 合計目的: 先にチャレンジ楽曲で最適なチャレンジ編成を求め、チャレンジpt 1あたりの価値を出す
   let chal=null;
   const chSong=state.ui.chSong==='none'?null:(state.songs.find(x=>x.id===state.ui.chSong)||song);
@@ -701,7 +701,7 @@ function solve(song,obj){
   if(obj==='score'||obj==='maxscore'||obj==='chscore'||isGk(obj)||obj==='power'){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
-    let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null;CTX.needLk=false;
+    let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,fNoLk=null;CTX.needLk=false;
     // 撃奏COMBO獲得量の上乗せの合計の最大（固定メンバーを入れたうえで、キャラ重複不可ならキャラごとに1枚）
     const comboMax=()=>{const fixed=M.filter(m=>m.lock),rest=M.filter(m=>!m.lock).sort((a,b)=>(b.cb||0)-(a.cb||0)),used=new Set(fixed.map(m=>m.chara));let sum=fixed.reduce((x,m)=>x+(m.cb||0),0),n=fixed.length;
       for(const m of rest){if(n>=5)break;if(state.settings.uniqueChara&&used.has(m.chara))continue;used.add(m.chara);sum+=m.cb||0;n++}return sum};
@@ -720,13 +720,21 @@ function solve(song,obj){
       if(cr&&ty.has('COMBO')){cbMax=comboMax();cbThr=cbMax;
         if(cr==='second'){const t2=optimizeF(e=>(e.cb||0)<cbMax?(e.cb||0)*1e12+e.score:-1e18),v2=evq(t2).cb||0;if(v2<cbMax)cbThr=v2}
         const thr=cbThr,f0=f;f=e=>((e.cb||0)>=thr?2e15:(e.cb||0)*1e12)+f0(e)}
+      fNoLk=f;
       if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
         if(lr==='second'){const v2=evq(optimizeF(e=>e.lk<lkMax*0.99?e.lk:-1e18)).lk;if(v2>0&&v2<lkMax)lkThr=v2}
         const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}}
     const t=optimizeF(f);
     // LUCK値は指定なしでも表示する（LUCK 区間のある撃奏の曲）。手持ちの最高は探索のあとに求める（探索の乱数の順を変えない）
     if(isGk(obj)&&lkMax==null&&(song.gkTypes||[]).includes('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;CTX.needLk=false}
-    return{best:pack(t),frontier:[],chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
+    const best=pack(t);
+    // LUCK値とスコアの比較（最適化タブの実行時だけ）: LUCK値の下限を最高の100%〜50%で変えてスコア最大を探し、どちらも負けている編成を除いて並べる
+    let lkCmp=null;
+    if(opt.lkCmp&&isGk(obj)&&lkMax>0&&fNoLk){CTX.needLk=true;const sc=1e14/lkMax,seen=new Map([[JSON.stringify(t),best]]);
+      for(const r of [1,.95,.9,.85,.8,.7,.6,.5]){const thr=lkMax*r*(1-1e-9),u=optimizeF(e=>(e.lk>=thr?2e15:e.lk*sc)+fNoLk(e));if(u&&!seen.has(JSON.stringify(u)))seen.set(JSON.stringify(u),pack(u))}
+      CTX.needLk=false;const ps=[...seen.values()];
+      lkCmp=ps.filter(p=>!ps.some(q=>q!==p&&q.e.lk>=p.e.lk-1e-6&&q.e.score>=p.e.score-1e-6&&(q.e.lk>p.e.lk+1e-6||q.e.score>p.e.score+1e-6))).sort((a,b)=>b.e.lk-a.e.lk)}
+    return{best,frontier:lkCmp||[],lkCmp:!!lkCmp,chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
   const frontier=[];let topT=null;
@@ -924,6 +932,13 @@ function chalKpis(C){return`<div class="kpis"><div class="kpi"><div class="k">�
       <div class="kpi"><div class="k">ボーナス pt / アイテム</div><div class="v">+${C.pt}% / +${C.it}%</div></div>
       <div class="kpi"><div class="k">1600消費（8倍）1回</div><div class="v">${fmt(C.per1600)}</div></div></div>`}
 const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?'':' open'}><summary>スコア・ボーナス</summary>${inner}</details>`;
+// LUCK値と推定スコアの比較表（LUCK 区間のある撃奏）。LUCK値が高い順、どちらも負けている編成は除く
+function lkCmpHtml(R,P){const b=R.best.e,nm=t=>t.m.map(i=>esc(M[i]?.chara||'')).join('・');
+  return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>LUCK値と推定スコアの比較</b> <span class="muted">（${R.frontier.length}件）</span></summary>
+  <p class="note">LUCK値の下限を手持ちの最高の100%〜50%で変えて、それぞれスコアが最大の編成を探しました。LUCK値が高いほど抽選で LUCK pt を稼ぎやすく、推定スコアは1位をとれたときの値です。</p>
+  <div class="tbl"><table><thead><tr><th class="num">LUCK値</th><th class="num">最高比</th><th class="num">推定スコア</th><th class="num">スコア差</th><th>メンバー</th><th></th></tr></thead><tbody>
+  ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td class="num"><b>${fmt(p.e.lk||0)}</b></td><td class="num">${Math.round((p.e.lk||0)/R.lkMax*100)}%</td><td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td>${nm(p.t)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
+  </tbody></table></div></details>`}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   if(R.error)return`<div class="panel bad">${esc(R.error)}</div>`;
@@ -933,7 +948,7 @@ function renderResult(){
   const st=state.settings;
   const vals=['pt','item','chpt','chitem','chgain'].map(o=>value(o,e,P.rank));
   const bp=bestOrderPos(e),slots=teamTable(e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})));
-  const fr=R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">余裕込みの必要スコア</th><th class="num">発動順の最低〜最高</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
+  const fr=R.lkCmp?lkCmpHtml(R,P):R.frontier.length?`<details class="panel frbox" data-fr${state.ui.frOpen?' open':''}><summary><b>到達ランク別の候補</b> <span class="muted">（${R.frontier.length}件・押すと開きます）</span></summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>推定ランク</th><th class="num">余裕込みの必要スコア</th><th class="num">発動順の最低〜最高</th><th class="num">ptボーナス</th><th class="num">アイテムボーナス</th><th class="num">${esc(objLabel.replace(/最大.*$/,''))}/回</th><th></th></tr></thead><tbody>
     ${R.frontier.map((p,i)=>`<tr class="${p===R.best?'best':''}"><td><b>${RANKS[p.rank]}</b></td><td class="num">${fmt((song.thr?.[RANKS[p.rank]]||0)/lowF())}</td><td class="num">${p.e.ord?`${fmt(p.e.ord[0].s)} 〜 ${fmt(p.e.ord[p.e.ord.length-1].s)}`:'—'}</td><td class="num">+${p.e.pt}%</td><td class="num">+${p.e.it}%</td><td class="num"><b>${fmt(p.val)}</b></td><td><button class="btn small" data-show="${i}">${(shownIdx===i||(shownIdx==null&&p===R.best))?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`).join('')}
     </tbody></table></div></details>`:'';
   const nextThr=RANKS.slice(P.rank+1).map(r=>song.thr?.[r]).find(x=>x>0);
@@ -1385,7 +1400,7 @@ function runOpt(){toolRun++;CHAL_CACHE=null;if(toolOut&&toolOut.done<toolOut.tot
   setTimeout(()=>{
     const song=curSong();
     if(!song){lastResult={error:'楽曲タブで曲を登録してください。'}}
-    else{seedRnd(12345);const r=solve(song,state.ui.obj);lastResult={...r,obj:state.ui.obj}}
+    else{seedRnd(12345);const r=solve(song,state.ui.obj,{lkCmp:true});lastResult={...r,obj:state.ui.obj}}
     shownIdx=null;save();render();
   },30);
 }
