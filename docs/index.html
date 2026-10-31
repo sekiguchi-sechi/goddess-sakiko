@@ -962,10 +962,13 @@ function retryRules(O,T,L,nm){
     const A=rest.slice().sort((a,b)=>fails(a.q)-fails(b.q)||b.q.hit-a.q.hit).slice(0,20),B=rest.slice().sort((a,b)=>b.q.hit-a.q.hit||fails(a.q)-fails(b.q)).slice(0,20);
     beam=[...new Set([...A,...B])]}
   if(!found)return{none,rules:[]};
-  // 番目の順に1行ずつ（その行までのルールを守って完走したときの値）
-  const rules=[],cum=[];
-  for(let k=0;k<4;k++){const b=found.ban[k];if(!b)continue;cum[k]=b;const A=[0,1,2,3,4].filter(i=>!b.has(i)),B=[...b].sort();
-    rules.push({t:A.length<=2?`${k+1}番目：${A.map(i=>nm[i]).join('・')}なら続行（ほかはリトライ）`:`${k+1}番目：${B.map(i=>nm[i]).join('・')}ならリトライ`,time:retryTime(O,T,L,stop(cum.slice())),...stat(cum.slice())})}
+  // 見つけたルールを守って残る並び（全部目標に届く）から逆算して、各番目で「来たらもう届かない人」を全部リトライにする（早く打ち切れる）。
+  // 前の番目のルールで来るはずのない人（1番目で続行した人など）は書かない（2026-10-31、Crucifix X で 4番目に睦 と出ていた不具合）
+  const live=O.filter(o=>!stop(found.ban)(o.p)),rules=[],cum=[];
+  for(let k=0;k<4;k++){const can=new Set(O.filter(o=>!stop(cum)(o.p)).map(o=>o.p[k])),ok=new Set(live.map(o=>o.p[k]));
+    const b=new Set([...can].filter(i=>!ok.has(i)));if(!b.size)continue;cum[k]=new Set([0,1,2,3,4].filter(i=>!ok.has(i)));
+    const A=[...ok].sort(),B=[...b].sort();
+    rules.push({t:A.length===1||A.length<B.length?`${k+1}番目：${A.map(i=>nm[i]).join('・')}なら続行（ほかはリトライ）`:`${k+1}番目：${B.map(i=>nm[i]).join('・')}ならリトライ`,time:retryTime(O,T,L,stop(cum.slice())),...stat(cum.slice())})}
   return{none,rules}}
 // リトライ判断: スキルは1番目から順に発動するので、発動した順に「まだ目標（120通りの上位○%）に届く並びが残っているか」を見て、
 // 残っていなければその時点でリトライ。届く並びが残る分かれ道だけを木で出す（あとは何が来ても届くところで打ち切り）
