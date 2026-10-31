@@ -220,7 +220,8 @@ const OBJECTIVES=[
   {id:'maxscore',label:'フリーライブ：最高スコア'},
   {id:'ptTotal',label:'イベントpt最大（フリー＋チャレンジ）'},
   {id:'itemTotal',label:'イベントバッジ最大（フリー＋チャレンジ）'},
-  {id:'chscore',label:'チャレンジライブ：スコア最大（ランキング用）'},
+  // チャレンジのスコアも発動順120通りの最大で選ぶ（2026-11-01。ランキングはリトライで良い順を狙うため）
+  {id:'chscore',label:'チャレンジライブ：最高スコア（ランキング用）'},
   {id:'gkscore',label:'撃奏ライブ：自分のスコア最大'},
   // 撃奏アリーナ（2026-10-28〜）: 撃奏ライブと同じ計算で、メンバーは楽曲のバンドの5人だけ（ゲームの文言「楽曲に設定されているバンドで編成する必要があります」）。
   // 適正・アリーナのイベントボーナス・サポートアイテムはマスターの中身が配信されてから入れる
@@ -673,7 +674,7 @@ function value(obj,e,rank){
     case'itemTotal':return Math.floor(((st.itemBase[R]||0)*(1+e.it/100)+(st.chGainBase[R]||0)*(CTX.vpc||0))*boost);
     case'chgain':return Math.floor((st.chGainBase[R]||0)*boost);
     case'power':return e.P;
-    case'maxscore':return e.max;
+    case'maxscore':case'chscore':return e.max; // スコア用はスキル発動順120通りの最大で選ぶ（ランキングはリトライで良い順を狙うため。2026-11-01）
     default:return e.score;
   }
 }
@@ -764,14 +765,14 @@ function solve(song,obj,opt={}){
   if(isGk(obj)&&!song.gkTypes?.length)return{error:'この曲は撃奏ライブのデータ（撃奏区間の種類）がありません。'};
   if(obj==='arena'&&!song.band)return{error:'この曲にはバンドが設定されていないので、撃奏アリーナの編成を組めません。'};
   if(obj==='arena'){const a=arenaSong(song);if(!a)return{error:'この曲は撃奏アリーナのデータ（撃奏の種類をそろえた計算結果）がありません。'};song=a}
-  prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',isGk(obj),obj==='arena'?song.band:'');CTX.vpc=chal?chal.vpc:0;CTX.wantMax=obj==='maxscore';
+  prep(song,obj==='chpt'||obj==='chitem'||obj==='chscore',isGk(obj),obj==='arena'?song.band:'');CTX.vpc=chal?chal.vpc:0;CTX.wantMax=obj==='maxscore'||obj==='chscore';
   if(M.length<5)return{error:obj==='arena'?`撃奏アリーナは楽曲のバンド（${song.band}）のメンバーだけで編成します。${song.band}のメンバーが5人未満です（除外中を含めて確認してください）。`:'メンバーが5人未満です（除外中を含めて確認してください）。'};
   if(state.settings.uniqueChara&&new Set(M.map(m=>m.chara)).size<5)return{error:'キャラ重複不可の設定で、異なるキャラが5人そろいません。'};
   const pack=t=>{const e=ev({...t,detail:true});const rank=rankOf(e.lo,song);return{t,e,rank,val:value(obj,e,rank)}};
   if(obj==='score'||obj==='maxscore'||obj==='chscore'||isGk(obj)||obj==='power'){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
-    let f=obj==='power'?e=>e.P:obj==='maxscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,jrMax=null,fCmp=null;CTX.needLk=false;
+    let f=obj==='power'?e=>e.P:obj==='maxscore'||obj==='chscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,jrMax=null,fCmp=null;CTX.needLk=false;
     // 撃奏COMBO獲得量の上乗せの合計の最大（固定メンバーを入れたうえで、キャラ重複不可ならキャラごとに1枚）
     const comboMax=()=>{const fixed=M.filter(m=>m.lock),rest=M.filter(m=>!m.lock).sort((a,b)=>(b.cb||0)-(a.cb||0)),used=new Set(fixed.map(m=>m.chara));let sum=fixed.reduce((x,m)=>x+(m.cb||0),0),n=fixed.length;
       for(const m of rest){if(n>=5)break;if(state.settings.uniqueChara&&used.has(m.chara))continue;used.add(m.chara);sum+=m.cb||0;n++}return sum};
@@ -1090,9 +1091,9 @@ const TOOL_FAST={restarts:16,minRestarts:8,stopHits:4};
 const PLAY_OVERHEAD=40; // 1回あたりの曲以外の時間（選曲・ロード・リザルト）の目安・秒
 function withFast(fn){const st=state.settings,keep={};for(const k in TOOL_FAST){keep[k]=st[k];st[k]=TOOL_FAST[k]}
   try{return fn()}finally{for(const k in keep){if(keep[k]===undefined)delete st[k];else st[k]=keep[k]}}}
-const objUnit=o=>({ptTotal:'pt / 回',itemTotal:'バッジ / 回',score:'推定スコア',maxscore:'最高スコア',chscore:'推定スコア',gkscore:'推定スコア',arena:'推定スコア'})[o]||'値';
+const objUnit=o=>({ptTotal:'pt / 回',itemTotal:'バッジ / 回',score:'推定スコア',maxscore:'最高スコア',chscore:'最高スコア',gkscore:'推定スコア',arena:'推定スコア'})[o]||'値';
 const perMin=o=>o==='ptTotal'||o==='itemTotal';
-const valCol=o=>o!=='score'&&o!=='chscore'&&!isGk(o); // 目的の値が推定スコアそのものなら列を重ねない
+const valCol=o=>o!=='score'&&!isGk(o); // 目的の値が推定スコアそのものなら列を重ねない
 // 全曲比較タブ: 目的を選んで全曲を最適化し、1回あたり・1分あたりで並べる
 function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o==='ptTotal'||o==='itemTotal',busy=cmpOut&&cmpOut.done<cmpOut.total;
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">全曲比較${perMin(o)?'（周回効率）':''}</h2>
