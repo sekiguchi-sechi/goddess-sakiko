@@ -772,8 +772,8 @@ function solve(song,obj,opt={}){
     const comboMax=()=>{const fixed=M.filter(m=>m.lock),rest=M.filter(m=>!m.lock).sort((a,b)=>(b.cb||0)-(a.cb||0)),used=new Set(fixed.map(m=>m.chara));let sum=fixed.reduce((x,m)=>x+(m.cb||0),0),n=fixed.length;
       for(const m of rest){if(n>=5)break;if(state.settings.uniqueChara&&used.has(m.chara))continue;used.add(m.chara);sum+=m.cb||0;n++}return sum};
     // 区間の種類が混ざった曲（全部入り）でも、JUST区間があれば判定幅スナップを最低1枚入れる（無いと実戦でJUSTが取りにくい）
-    // 判定幅スナップの枚数を指定したとき（gkJudgeN）は、JUST区間のある曲でその枚数ちょうどの編成を探す（手持ちが足りなければ近い枚数）
-    if(isGk(obj)){const ty=new Set(song.gkTypes||[]),st=state.settings,JN=st.gkJudgeN,fixJ=ty.has('JUST')&&typeof JN==='number';
+    // 判定幅スナップの枚数を指定したとき（gkJudgeN）は、JUST区間のある曲でその枚数ちょうどの編成を探す（手持ちの判定幅スナップ（撃奏サポートLv5）が足りなければ持っている枚数）
+    if(isGk(obj)){const ty=new Set(song.gkTypes||[]),st=state.settings,JN=typeof st.gkJudgeN==='number'?Math.min(st.gkJudgeN,S.filter(s=>s.gkJudgeAll).length):null,fixJ=ty.has('JUST')&&typeof JN==='number';
       let k=null,need=0,nj=0;
       if(st.gkReq!==false){if(ty.size===1){k=[...ty][0];need=({JUST:st.gkNeedJ??4,COMBO:st.gkNeedC??4,LUCK:st.gkNeedL??2})[k]||0;nj=k==='JUST'?(st.gkNeedJudge??2):0}
         else if(ty.has('JUST'))nj=st.gkNeedJudgeMix??1}
@@ -896,7 +896,7 @@ function gkInputs(song,o,part){const st=state.settings,REQ=[['','指定なし'],
       <label class="f" title="撃奏アリーナでは、楽曲のタイプがバンドごとのルールに統一されます。ゲームのデータにある今のルールを自動で入れます">楽曲のタイプ（${esc(song.band)}）<select id="arenaType">${opts([['all','ALL（全タイプ一致）'],...TYPES.map(t=>[t,t]),['','楽曲のまま（'+(song.type||'')+'）']],R.type)}</select></label>`}
   const kinds=new Set(o==='arena'&&song?.band?[arenaRule(song.band).gk]:(song?.gkTypes||[]));let h='';
   if(kinds.has('JUST'))h+=`<label class="f" title="撃奏のJUST区間で、ノーツのうちJUST判定になる割合の目安（判定幅を広げるスナップは1枚ごとに約15%上乗せして計算）。作者の実測では約20%">自分のJUST率 %<input type="number" id="gkJust" value="${state.settings.gkJust??20}" step="5" min="0" max="100"></label>
-      <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（撃奏サポートLv5の、まぶたをおろして・マジカルフィジカル・エール！など）を何枚入れるか。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`;
+      <label class="f" title="JUST区間のあいだずっと判定幅を広げるスナップ（撃奏サポートLv5の、まぶたをおろして・マジカルフィジカル・エール！など）を何枚入れるか（手持ちが足りなければ持っている枚数）。自動は、JUST区間だけの曲で2枚以上・区間が混ざった曲で1枚以上（「勝てる編成の条件」がオンのとき）。JUST区間が無い曲では使いません">判定幅スナップ<select id="gkJudgeN">${opts([['','自動'],...[0,1,2,3,4,5].map(n=>[String(n),n+'枚'])],state.settings.gkJudgeN==null?'':String(state.settings.gkJudgeN))}</select></label>`;
   if(kinds.has('COMBO'))h+=`<label class="f" title="COMBO 撃奏は区間内の COMBO 数で順位が決まります。メンバーの「撃奏COMBO獲得量UP」の合計が、手持ちで出せる最高（または2番目以上）の編成の中からスコア最大を選びます。COMBO 区間の無い曲では使いません">COMBO数<select id="gkComboReq">${opts(REQ,st.gkComboReq??(st.gkComboMax?'max':''))}</select></label>`;
   if(kinds.has('LUCK'))h+=`<label class="f" title="LUCK 撃奏は区間内の LUCK pt で順位が決まります。LUCK値＝LUCK のメンバーの撃奏スキルと、抽選に効く LUCK スナップが LUCK 区間に足すスコア（LUCK pt の代わり。スコアUP 系のスナップは含めません）。最高（または最高から1%以上下がる中で一番高い値以上）の編成の中からスコア最大を選びます。LUCK 区間の無い曲では使いません">LUCK値<select id="gkLuckReq">${opts(REQ,st.gkLuckReq||'')}</select></label>`;
   return h}
