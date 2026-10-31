@@ -182,6 +182,11 @@ nav.tabs .subtabs button[aria-selected="true"]{background:var(--accent);border-c
   .grow-up{min-width:0}
 }
 @media (max-width:480px){nav.tabs{gap:0 2px}nav.tabs>button{padding:8px 7px 9px}nav.tabs .subtabs{padding:4px 0 6px}nav.tabs .subtabs button{padding:3px 10px;font-size:12.5px}}
+
+/* 曲選択にバンドを出す（2026-11-01） */
+.combo-opt i.cb{font-style:normal;display:inline-block;min-width:7.2em;margin-right:8px;font-size:11px;color:var(--muted)}
+.combo-opt i.cb.b-0{color:#4f8fd6}.combo-opt i.cb.b-1{color:#b06ad0}.combo-opt i.cb.b-2{color:#e0789a}.combo-opt i.cb.b-3{color:#3fa98a}.combo-opt i.cb.b-4{color:#d99a3a}
+.songband{font-size:12px;color:var(--muted);margin-top:2px}
 </style>
 
 <header class="top">
@@ -922,9 +927,9 @@ function viewOpt(){
   <section class="panel stack">
     <div class="row">
       <label class="f">目的<select id="obj">${opts(OBJECTIVES.map(o=>[o.id,o.label]),state.ui.obj)}</select></label>
-      ${useSong?`<label class="f">楽曲（入力で検索・空欄で一覧）${comboHtml('songSel',song?.name||'')}</label>`:''}
+      ${useSong?`<label class="f">楽曲（入力で検索・空欄で一覧）${comboHtml('songSel',song?.name||'')}${song?.band?`<small class="songband">${esc(song.band)}</small>`:''}</label>`:''}
       ${isGk(o)?gkInputs(song,o,'rule'):''}
-      ${useCh?`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',state.ui.chSong==='none'?NO_CH:((state.songs.find(x=>x.id===state.ui.chSong)||song)?.name||''))}</label>`:''}
+      ${useCh?(()=>{const cs=state.ui.chSong==='none'?null:(state.songs.find(x=>x.id===state.ui.chSong)||song);return`<label class="f">チャレンジ楽曲${comboHtml('chSongSel',cs?cs.name:NO_CH)}${cs?.band?`<small class="songband">${esc(cs.band)}</small>`:''}</label>`})():''}
       ${useLb?`<label class="f">ライブブースト<select id="lb">${opts([0,1,2,3,4,5,10].map(n=>[n,n===0?'なし（×1）':`${n}個（×${n*5}）`]),state.settings.lb)}</select></label>`:''}
       ${useMult?`<label class="f">チャレンジ消費倍率<select id="chMult">${opts([1,2,4,8].map(n=>[n,`${n}倍（${n*200}消費）`]),state.settings.chMult)}</select></label>`:''}
       ${o==='arena'?'':`<label class="f" title="推定ランクは、スキル順が悪いほうに寄ったときのスコアから、さらにこの%を引いても届くかで判定します（ミス・GREAT・計算のずれへの備え）">ランク判定の余裕 %<input type="number" id="margin" value="${state.settings.margin}" step="0.5" min="0"></label>`}
@@ -1106,21 +1111,28 @@ function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o=
       <button class="btn primary" data-act="cmpSongs"${busy?' disabled':''}>全曲を計算</button>
     </div>
     <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます。最適化タブで1曲ずつ計算したときと同じ編成・値になります。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
+  <section class="panel row" style="padding:10px 14px"><label class="f">表示する曲を曲名で絞り込む<input id="cmpQ" value="${esc(state.ui.cmpQ||'')}" placeholder="曲名の一部" style="width:220px"></label></section>
   <div id="cmp">${cmpHtml()}</div></div>`}
 function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
-  const key=state.ui.cmpSort==='min'&&perMin(T.obj)?'pm':'val';
-  // 表示の絞り込み（バンド・タイプ）。計算はやり直さない。並びは同じ値なら、1回あたり→1分あたり（時間効率）の高い順
-  const F=cmpFilter(),bandOf=r=>r.band||'その他',all=[...T.rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1)||(key==='val'&&perMin(T.obj)?(b.pm??-1)-(a.pm??-1):(b.val??-1)-(a.val??-1)));
-  const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type)));
+  // 並べ替え（2026-11-01 追加: 推定スコア・曲名・バンド・長さ）。値の高い順が既定。1分あたりは周回効率の目的だけ
+  const SORTS=cmpSorts(T.obj);let key=state.ui.cmpSort||'val';if(!SORTS.some(x=>x[0]===key))key='val';
+  // 表示の絞り込み（バンド・タイプ・曲名）。計算はやり直さない。並びは同じ値なら、1回あたり→1分あたり（時間効率）の高い順
+  const F=cmpFilter(),bandOf=r=>r.band||'その他',q=nzq(state.ui.cmpQ),bi=r=>{const i=BAND_NAMES.indexOf(r.band);return i<0?99:i};
+  const num=k=>(a,b)=>(b[k]??-1)-(a[k]??-1),tie=(a,b)=>perMin(T.obj)?(b.pm??-1)-(a.pm??-1)||(b.val??-1)-(a.val??-1):(b.val??-1)-(a.val??-1);
+  const cmpF={val:(a,b)=>num('val')(a,b)||(perMin(T.obj)?num('pm')(a,b):0),min:(a,b)=>num('pm')(a,b)||num('val')(a,b),score:(a,b)=>num('score')(a,b)||tie(a,b),
+    name:(a,b)=>a.name.localeCompare(b.name,'ja'),band:(a,b)=>bi(a)-bi(b)||tie(a,b),short:(a,b)=>(a.len||0)-(b.len||0)||tie(a,b),long:(a,b)=>(b.len||0)-(a.len||0)||tie(a,b)}[key];
+  const all=[...T.rows].sort((a,b)=>(!!a.err-!!b.err)||cmpF(a,b));
+  const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type))&&(!q||nzq(r.name).includes(q)));
   const grp=(k,label,items,typed)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" data-cmpf="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" data-cmpf="${k}" data-v="">解除</button>`:''}</div>`;
   const ar=T.obj==='arena',bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
   return`<section class="panel stack"><h3 style="margin:0">${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
-    ${perMin(T.obj)?`<div class="row"><span class="muted">並べ替え</span><button class="fchip${key==='val'?' on':''}" data-act="cmpSortVal">1回あたり</button><button class="fchip${key==='pm'?' on':''}" data-act="cmpSortMin">1分あたり</button><span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span></div>`:''}
+    <div class="row"><label class="f">並べ替え<select id="cmpSortSel">${opts(SORTS,key)}</select></label>${perMin(T.obj)?`<span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span>`:''}</div>
     <div class="fchips">${grp('band','バンド',bands)}${grp('type','タイプ',TYPES,true)}</div>
-    ${F.band.length||F.type.length?`<p class="muted" style="margin:0">${all.length}曲中 ${rows.length}曲を表示</p>`:''}
+    ${F.band.length||F.type.length||q?`<p class="muted" style="margin:0">${all.length}曲中 ${rows.length}曲を表示</p>`:''}
     <div class="tbl"><table><thead><tr><th>#</th><th>曲</th>${ar?'<th>バンド</th><th>今日の撃奏</th>':'<th>推定ランク</th>'}<th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
     ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${ar?`<td>${esc(r.band)}</td><td>${(()=>{const R=arenaRule(r.band);return`<b>${esc(R.gk)}</b> <span class="muted">${R.type==='all'?'ALL':esc(R.type||'')}</span>`})()}</td>`:''}${r.err?`<td colspan="${(ar?2:3)+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`${ar?'':`<td><b>${RANKS[r.rank]}</b></td>`}<td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
     </tbody></table></div></section>`}
+const cmpSorts=o=>[['val',perMin(o)?'1回あたりが多い順':`${objUnit(o)}が高い順`],...(perMin(o)?[['min','1分あたりが多い順']]:[]),...(valCol(o)?[['score','推定スコアが高い順']]:[]),['name','曲名順'],['band','バンド順'],['short','短い順'],['long','長い順']];
 function cmpFilter(){const u=state.ui;if(!u.cmpF||!Array.isArray(u.cmpF.band)||!Array.isArray(u.cmpF.type))u.cmpF={band:[],type:[]};return u.cmpF}
 function paintCmp(){const el=document.getElementById('cmp');if(el)el.innerHTML=cmpHtml();const b=document.querySelector('[data-act="cmpSongs"]');if(b)b.disabled=!!(cmpOut&&cmpOut.done<cmpOut.total)}
 // 楽曲比較: 全曲を順に最適化
@@ -1447,16 +1459,28 @@ function viewSnaps(){
   <tbody>${rows}</tbody></table></div></div>`;
 }
 // 公開版の楽曲一覧（閲覧のみ）: 曲名・バンド・タイプ・長さ・撃奏区間・ランクの必要スコア
-function viewSongList(){const q=(state.ui.songQ||'').normalize('NFKC').toLowerCase();
-  const list=state.songs.filter(s=>!q||s.name.normalize('NFKC').toLowerCase().includes(q));
-  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">楽曲</h2>
-    <div class="row"><label class="f">曲名で検索<input id="songQ" value="${esc(state.ui.songQ||'')}" placeholder="曲名の一部" style="width:220px"></label><span class="muted">${list.length}曲 / 全${state.songs.length}曲</span></div>
-    <p class="note">難易度はすべて EXPERT です。必要スコアはフリー・チャレンジライブのランクの基準です。</p></section>
+// 曲一覧（2026-11-01 並べ替え・絞り込みを追加）。絞り込みは バンド・タイプ・撃奏区間の種類（含む曲）、並べ替えは追加順・曲名・バンド・タイプ・長さ・SS の必要スコア
+function songFilter(){const f=state.ui.slF||{};for(const k of ['band','type','gk'])f[k]=Array.isArray(f[k])?f[k]:[];f.sort??='new';state.ui.slF=f;return f}
+const nzq=x=>(x||'').normalize('NFKC').toLowerCase();
+function songChips(F,k,label,items,typed,attr){return`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" ${attr}="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" ${attr}="${k}" data-v="">解除</button>`:''}</div>`}
+function sortSongs(list,key){const idx=new Map(state.songs.map((s,i)=>[s.id,i])),bi=s=>{const i=BAND_NAMES.indexOf(s.band);return i<0?99:i},ti=s=>{const i=TYPES.indexOf(s.type);return i<0?99:i};
+  const by={new:(a,b)=>idx.get(b.id)-idx.get(a.id),old:(a,b)=>idx.get(a.id)-idx.get(b.id),name:(a,b)=>a.name.localeCompare(b.name,'ja'),band:(a,b)=>bi(a)-bi(b)||idx.get(b.id)-idx.get(a.id),
+    type:(a,b)=>ti(a)-ti(b)||bi(a)-bi(b),short:(a,b)=>(a.len||0)-(b.len||0),long:(a,b)=>(b.len||0)-(a.len||0),ss:(a,b)=>(b.thr?.SS||0)-(a.thr?.SS||0)}[key]||((a,b)=>0);
+  return[...list].sort(by)}
+const SONG_SORTS=[['new','新しい順'],['old','古い順'],['name','曲名順'],['band','バンド順'],['type','タイプ順'],['short','短い順'],['long','長い順'],['ss','SSの必要スコアが高い順']];
+function viewSongList(){const q=nzq(state.ui.songQ),F=songFilter();
+  const list=sortSongs(state.songs.filter(s=>(!q||nzq(s.name).includes(q))&&(!F.band.length||F.band.includes(s.band||'その他'))&&(!F.type.length||F.type.includes(s.type))&&(!F.gk.length||F.gk.some(g=>(s.gkTypes||[]).includes(g)))),F.sort);
+  const bands=[...BAND_NAMES,...(state.songs.some(s=>!s.band)?['その他']:[])];
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">曲一覧</h2>
+    <div class="row"><label class="f">曲名で検索<input id="songQ" value="${esc(state.ui.songQ||'')}" placeholder="曲名の一部" style="width:220px"></label>
+      <label class="f">並べ替え<select id="slSort">${opts(SONG_SORTS,F.sort)}</select></label><span class="muted">${list.length}曲 / 全${state.songs.length}曲</span></div>
+    <div class="fchips">${songChips(F,'band','バンド',bands,false,'data-slf')}${songChips(F,'type','タイプ',TYPES,true,'data-slf')}${songChips(F,'gk','撃奏区間',['JUST','COMBO','LUCK'],false,'data-slf')}</div>
+    <p class="note">難易度はすべて EXPERT です。必要スコアはフリー・チャレンジライブのランクの基準です。撃奏区間の絞り込みは、その種類の区間を含む曲です。</p></section>
   <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>バンド</th><th>タイプ</th><th class="num">長さ</th><th>撃奏区間</th>${['A','S','SS'].map(r=>`<th class="num">${r}</th>`).join('')}</tr></thead><tbody>
   ${list.map(s=>`<tr><td>${esc(s.name)}</td><td style="font-size:12px">${esc(s.band||'—')}</td><td>${chip(s.type==='all'?'':s.type)}</td><td class="num">${Math.round(s.len||0)}秒</td><td style="font-size:12px">${gkLabel(s.id).replace(/<[^>]+>/g,'').trim()||'—'}</td>${['A','S','SS'].map(r=>`<td class="num">${s.thr?.[r]?fmt(s.thr[r]):'—'}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div></div>`}
 function viewSongs(){if(PUBLIC)return viewSongList();
-  return`<div class="stack"><section class="panel stack">
+  return viewSongList()+`<details class="panel" id="songEdit"${state.ui.songEdit?' open':''}><summary><b>楽曲の編集（作者用）</b></summary><div class="stack" style="margin-top:8px"><section class="stack">
     <div class="row"><h2 style="margin:0">楽曲</h2><button class="btn small primary" data-act="addSong">＋ 追加</button></div>
     <p class="note">ランク閾値は曲・難易度ごとに違います（ランクグループ単位）。リザルト画面のランクゲージや攻略情報で分かった値を入れてください。スコアは曲ごとの重み表（haneoka の計算エンジンから取得）で計算します。重み表の無い曲を追加した場合は、最適化タブで実スコアから補正してください。曲タイプ「全タイプ」は全員が楽曲タイプ一致扱い（未検証）。<b>得意楽曲のバンド</b>はその曲を持ち歌とするバンド（例 Symbol III → Ave Mujica）。そのバンドのメンバーに得意楽曲ボーナスが付きます。</p>
   </section>
@@ -1468,7 +1492,7 @@ function viewSongs(){if(PUBLIC)return viewSongList();
     <td><input data-f="len" data-n type="number" class="w-s" value="${s.len}"></td>
     ${RANKS.slice(1).map(r=>`<td><input data-f="thr.${r}" data-n type="number" style="width:100px" value="${s.thr?.[r]??''}"></td>`).join('')}
     <td><button class="btn small" data-del>削除</button></td></tr>`).join('')}
-  </tbody></table></div></div>`;
+  </tbody></table></div></div></details>`;
 }
 function viewEvent(){
   return`<div class="stack"><section class="panel stack">
@@ -1642,6 +1666,7 @@ document.addEventListener('click',e=>{
   const gf=e.target.closest('[data-gcf]');if(gf){state.ui.gcf={...(state.ui.gcf||{}),[gf.dataset.gcf]:gf.dataset.v};save();paintGrow();return}
   const gc=e.target.closest('[data-gcat]');if(gc){state.ui.gcat=gc.dataset.gcat;save();paintGrow();return}
   const cf=e.target.closest('[data-cmpf]');if(cf){const L=cmpFilter()[cf.dataset.cmpf],v=cf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();paintCmp();return}
+  const sf=e.target.closest('[data-slf]');if(sf){const L=songFilter()[sf.dataset.slf],v=sf.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
   const fc=e.target.closest('[data-cft]');if(fc){const L=cardFilter()[fc.dataset.cft],v=fc.dataset.v;if(!v)L.length=0;else{const i=L.indexOf(v);if(i>=0)L.splice(i,1);else L.push(v)}save();render();return}
   const hp=e.target.closest('[data-help]');if(hp){if(matchMedia('(hover:hover)').matches)return;const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
   if(e.target.id==='run'){runOpt();return}
@@ -1695,6 +1720,9 @@ document.addEventListener('change',e=>{
   if(el.id==='evName'){state.event.name=el.value;save();return}
   if(el.dataset.set){const k=el.dataset.set;const v=el.type==='checkbox'?el.checked:+el.value;setPath(state.settings,k,v);lastResult=idealRes=null;save();if(state.ui.tab==='members')render();return}
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
+  if(el.id==='slSort'){songFilter().sort=el.value;save();render();return}
+  if(el.id==='cmpSortSel'){state.ui.cmpSort=el.value;save();paintCmp();return}
+  if(el.id==='cmpQ'){state.ui.cmpQ=el.value;save();paintCmp();return}
   if(el.id==='songQ'){state.ui.songQ=el.value;save();render();document.getElementById('songQ')?.focus();return}
   if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=idealRes=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
   const ctr=el.closest('tr[data-kind="cm"],tr[data-kind="cs"]');
@@ -1742,14 +1770,18 @@ function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")g
 
 // 条件を変えたら、出ている結果が古いことを示す
 document.addEventListener('change',()=>setTimeout(()=>inTab(paintStale),0));
+
+// 曲一覧の「楽曲の編集」の開閉を覚える（編集のたびに描き直しても閉じない）
+document.addEventListener('toggle',e=>{if(e.target.id==='songEdit'){state.ui.songEdit=e.target.open;save()}},true);
+document.addEventListener('input',e=>{if(e.target.id==='cmpQ'){state.ui.cmpQ=e.target.value;save();paintCmp()}});
 // ===== 楽曲のコンボボックス（入力すれば検索、空欄なら全曲の一覧） =====
 const NO_CH='なし（チャレンジライブ無し）';
-function comboHtml(id,val){return`<span class="combo"><input id="${id}" class="songpick" value="${esc(val)}" data-prev="${esc(val)}" autocomplete="off" role="combobox" aria-expanded="false" placeholder="曲名を入力（空欄で一覧）"><button type="button" class="combo-btn" data-combo-btn="${id}" tabindex="-1" aria-label="一覧を開く">▾</button><span class="combo-list" role="listbox" hidden></span></span>`}
+function comboHtml(id,val){return`<span class="combo"><input id="${id}" class="songpick" value="${esc(val)}" data-prev="${esc(val)}" autocomplete="off" role="combobox" aria-expanded="false" placeholder="曲名・バンド名を入力（空欄で一覧）"><button type="button" class="combo-btn" data-combo-btn="${id}" tabindex="-1" aria-label="一覧を開く">▾</button><span class="combo-list" role="listbox" hidden></span></span>`}
 function comboItems(id){
   const nz=x=>x.normalize('NFKC').toLowerCase();
-  const songs=state.songs.map(x=>({v:x.id,l:x.name}));
+  const songs=state.songs.map(x=>({v:x.id,l:x.name,b:x.band||''}));
   if(id!=='chSongSel')return songs;
-  const ch=(state.event.chSongs||[]).map(n=>state.songs.find(x=>x.name.startsWith(n))).filter(Boolean).map(x=>({v:x.id,l:x.name,tag:'課題楽曲'}));
+  const ch=(state.event.chSongs||[]).map(n=>state.songs.find(x=>x.name.startsWith(n))).filter(Boolean).map(x=>({v:x.id,l:x.name,b:x.band||'',tag:'課題楽曲'}));
   const chIds=new Set(ch.map(x=>x.v));
   return[{v:'none',l:NO_CH},...ch,...songs.filter(x=>!chIds.has(x.v))];
 }
@@ -1758,8 +1790,9 @@ function gkLabel(id){const t=state.songs.find(x=>x.id===id)?.gkTypes;if(!t||!t.l
   const txt=t.every(x=>x===t[0])?`${t[0]}×${t.length}`:t.join('・');return` <small class="gk">${txt}</small>`}
 function comboOpen(inp,q){
   const list=inp.parentNode.querySelector('.combo-list');const nz=x=>x.normalize('NFKC').toLowerCase();const qq=nz(q||'');
-  const items=comboItems(inp.id).filter(x=>!qq||nz(x.l).includes(qq));
-  list.innerHTML=items.length?items.map((x,k)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}${gkLabel(x.v)}</span>`).join(''):'<span class="combo-empty">一致する曲がありません</span>';
+  // 曲名のほか、バンド名でも絞り込める（2026-11-01）
+  const items=comboItems(inp.id).filter(x=>!qq||nz(x.l).includes(qq)||(x.b&&nz(x.b).includes(qq)));
+  list.innerHTML=items.length?items.map((x,k)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${x.b?`<i class="cb b-${BAND_NAMES.indexOf(x.b)}">${esc(x.b)}</i>`:''}${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}${gkLabel(x.v)}</span>`).join(''):'<span class="combo-empty">一致する曲がありません</span>';
   list.hidden=false;inp.setAttribute('aria-expanded','true');
 }
 function comboClose(inp,restore){const list=inp.parentNode.querySelector('.combo-list');list.hidden=true;inp.setAttribute('aria-expanded','false');if(restore)inp.value=inp.dataset.prev}
