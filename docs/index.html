@@ -861,9 +861,10 @@ function solve(song,obj,opt={}){
 
 // ===== 描画 =====
 // タブは「グループ＋サブタブ」の2段（2026-10-30）。state.ui.tab はサブタブ（葉）の id のまま
-const TAB_GROUPS=[['opt','最適化',[['opt','今の手持ち'],['ideal','理想（育てたら）']]],['compare','全曲比較',[['compare','全曲比較']]],
-  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断']]],['roster','手持ち',[['members','メンバー'],['snaps','スナップ']]],
-  ['data','データ',PUBLIC?[['songs','楽曲'],['settings','保存・読み込み']]:[['songs','楽曲'],['event','イベント'],['settings','設定・データ']]]];
+
+const TAB_GROUPS=[['opt','最適化',[['opt','今の手持ち'],['ideal','理想（育てたら）']]],['compare','全曲比較',[['compare','比較'],['songs','曲一覧']]],
+  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断']]],
+  ['roster','手持ちデータ',[['members','メンバー'],['snaps','スナップ'],['settings','プレイヤー情報'],...(PUBLIC?[]:[['event','イベント']])]]];
 const TABS=TAB_GROUPS.flatMap(g=>g[2]);
 const tabGroup=id=>TAB_GROUPS.find(g=>g[2].some(x=>x[0]===id))||TAB_GROUPS[0];
 let lastResult=null,shownIdx=null;
@@ -885,8 +886,8 @@ function guidePanel(){
   const open=!(nm>=5&&ns>=5)||state.ui.guide===true;
   return`<details class="panel guide" data-guide${open?' open':''}><summary><b>使い方</b>${nm?`<span class="muted">（メンバー${nm}枚・スナップ${ns}枚を登録済み）</span>`:''}</summary>
     <ol class="steps">
-      ${st(nm>=5&&ns>=5,`<b>手持ちを登録する</b>：「メンバー」「スナップ」タブで、持っているカードの「所持」にチェックを入れ、Lv・特訓・覚醒などをゲームの詳細画面に合わせます。数値は自動で計算されます。`)}
-      ${st(set,PUBLIC?`<b>プレイヤー情報を入れる</b>（任意）：「データ」タブから、キャラクターランク・バンドアイテム・T.G.W CARD の値を書いたJSONを読み込むと総合力が正確になります。`:`<b>プレイヤー情報を入れる</b>（任意）：「設定・データ」タブで、キャラクターランク・バンドアイテム・T.G.W CARD の値を入れると総合力が正確になります。`)}
+      ${st(nm>=5&&ns>=5,`<b>手持ちを登録する</b>：「手持ちデータ」の「メンバー」「スナップ」で、持っているカードの「所持」にチェックを入れ、Lv・特訓・覚醒などをゲームの詳細画面に合わせます。数値は自動で計算されます。`)}
+      ${st(set,PUBLIC?`<b>プレイヤー情報を入れる</b>（任意）：「手持ちデータ」の「プレイヤー情報」から、キャラクターランク・バンドアイテム・T.G.W CARD の値を書いたJSONを読み込むと総合力が正確になります。`:`<b>プレイヤー情報を入れる</b>（任意）：「手持ちデータ」の「プレイヤー情報」で、キャラクターランク・バンドアイテム・T.G.W CARD の値を入れると総合力が正確になります。`)}
       ${st(false,`<b>目的と曲を選んで計算する</b>：この画面で目的（イベントpt最大・最高スコアなど）と曲を選び、「最適編成を計算」を押します。`)}
     </ol>
     <div class="row">${nm?'':`<button class="btn small primary" data-act="goMembers">メンバーを登録する</button>`}${PUBLIC?'':'<button class="btn small" data-act="useAuthor">作者の手持ちで試す</button>'}</div>
@@ -1729,7 +1730,7 @@ function runOpt(){toolRun++;CHAL_CACHE=null;if(growOut&&growOut.phase!=="done")g
   serial();
   function serial(){setTimeout(()=>{
     const song=curSong(),id=state.ui.tab==='ideal';
-    if(!song){const e={error:'楽曲タブで曲を登録してください。'};if(id)idealRes=e;else lastResult=e}
+    if(!song){const e={error:'全曲比較の「曲一覧」で曲を登録してください。'};if(id)idealRes=e;else lastResult=e}
     else{const go=k=>{seedRnd(12345);const r=solve(song,state.ui.obj,{gkCmp:true});return{...r,obj:state.ui.obj,key:k,ctx:[M,S,CTX]}};
       // 理想編成では、今の手持ちの結果が同じ条件で無ければ一緒に計算する（差を出すため。最適化タブの結果にもなる）
       if(id){if(!lastResult||lastResult.key!==optKey()){lastResult=go(optKey());shownIdx=null}idealRes={...withIdeal(()=>go(idealKey())),idealF:idealF()};idealShown=null}
