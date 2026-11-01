@@ -89,7 +89,7 @@ td input.w-l{width:150px}
 .kpi .v.r{font-family:var(--f-mono);font-weight:800;font-size:24px;color:var(--accent);letter-spacing:.06em}
 tr.best td{background:var(--soft)}
 tr.best td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.warnrow td:first-child{color:var(--warn);font-weight:600}.bad{color:var(--bad)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.warnrow td:first-child{color:var(--warn);font-weight:600}tr.sel td{background:color-mix(in srgb,var(--accent) 10%,transparent)}.bad{color:var(--bad)}
 .panel.warn{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}.panel.bad{border-color:color-mix(in srgb,var(--bad) 60%,var(--line))}
 .note{font-size:12px;color:var(--muted);max-width:75ch}
 details summary{cursor:pointer;font-weight:700}
@@ -798,7 +798,7 @@ function solve(song,obj,opt={}){
   if(obj==='score'||obj==='maxscore'||obj==='chscore'||isGk(obj)||obj==='power'){
     // 撃奏: 区間の種類が1種類の曲は、勝てる編成の条件（撃奏スキル持ちの人数・JUSTは区間全体の判定幅スナップ）を満たす中で最大を探す
     // 条件は実戦で全勝できた編成から（JUST: JUSTスキル4人＋判定幅2枚、COMBO: COMBOスキル4人、LUCK: LUCKスキル2人）
-    let f=obj==='power'?e=>e.P:obj==='maxscore'||obj==='chscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,jrMax=null,fCmp=null;CTX.needLk=false;
+    let f=obj==='power'?e=>e.P:obj==='maxscore'||obj==='chscore'?e=>e.max:e=>e.score,cbMax=null,cbThr=null,lkMax=null,lkThr=null,jrMax=null,jsMax=null,fCmp=null;CTX.needLk=false;CTX.needJs=false;
     // 撃奏COMBO獲得量の上乗せの合計の最大（固定メンバーを入れたうえで、キャラ重複不可ならキャラごとに1枚）
     const comboMax=()=>{const fixed=M.filter(m=>m.lock),rest=M.filter(m=>!m.lock).sort((a,b)=>(b.cb||0)-(a.cb||0)),used=new Set(fixed.map(m=>m.chara));let sum=fixed.reduce((x,m)=>x+(m.cb||0),0),n=fixed.length;
       for(const m of rest){if(n>=5)break;if(state.settings.uniqueChara&&used.has(m.chara))continue;used.add(m.chara);sum+=m.cb||0;n++}return sum};
@@ -821,7 +821,10 @@ function solve(song,obj,opt={}){
       fCmp=e=>{const sh=Math.max(0,need-((k&&(e.mk||{})[k])||0));return e.score*(sh?0.5-0.05*sh:1)};
       if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
         if(lr==='second'){const v2=evq(optimizeF(e=>e.lk<lkMax*0.99?e.lk:-1e18)).lk;if(v2>0&&v2<lkMax)lkThr=v2}
-        const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}}
+        const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}
+      // JUST の区間の強さ（推定JUST率×(1＋JUST数獲得量の上乗せ)、e.js）を最高に必須（gkJustReq='max'。アリーナ作戦の診断で使う、2026-11-01）
+      if(st.gkJustReq==='max'&&ty.has('JUST')){CTX.needJs=true;jsMax=evq(optimizeF(e=>e.js||0)).js||0;
+        const thr=jsMax*(1-1e-9),sc=1e14/Math.max(jsMax,1e-9),f2=f;f=e=>((e.js||0)>=thr?2e15:(e.js||0)*sc)+f2(e)}}
     const t=optimizeF(f);
     // LUCK値は指定なしでも表示する（LUCK 区間のある撃奏の曲）。手持ちの最高は探索のあとに求める（探索の乱数の順を変えない）
     if(isGk(obj)&&lkMax==null&&(song.gkTypes||[]).includes('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;CTX.needLk=false}
@@ -847,7 +850,7 @@ function solve(song,obj,opt={}){
         const same=(a,b)=>Math.abs(a.v-b.v)<1e-6&&Math.abs(a.p.e.score-b.p.e.score)<1e-6;
         const rows=ps.filter(a=>a.p===best0||!ps.some(b=>b!==a&&b.v>=a.v-1e-6&&b.p.e.score>=a.p.e.score-1e-6&&(b.v>a.v+1e-6||b.p.e.score>a.p.e.score+1e-6))).filter((a,i,arr)=>a.p===best0||!arr.some((b,j)=>(b.p===best0||j<i)&&same(a,b))).sort((a,b)=>b.v-a.v||b.p.e.score-a.p.e.score);
         cmp.push({kind,max:mx,rows:rows.map(r=>{front.push(r.p);return{i:front.length-1,v:r.v}})})}}
-    return{best,frontier:front,cmp,chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,jrMax,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
+    return{best,frontier:front,cmp,chal,songId:song.id,arena:song.arena||null,cbMax,cbThr,lkMax,lkThr,jrMax,jsMax,cbReq:cbMax!=null?(state.settings.gkComboReq??(state.settings.gkComboMax?'max':'')):'',lkReq:lkMax!=null?state.settings.gkLuckReq:''};
   }
   const bonusKey=(obj==='pt'||obj==='chpt'||obj==='ptTotal')?'pt':'it';
   const frontier=[];let topT=null;
@@ -889,7 +892,7 @@ function solve(song,obj,opt={}){
 // タブは「グループ＋サブタブ」の2段（2026-10-30）。state.ui.tab はサブタブ（葉）の id のまま
 
 const TAB_GROUPS=[['opt','最適化',[['opt','今の手持ち'],['ideal','理想（育てたら）']]],['compare','全曲比較',[['compare','比較'],['songs','曲一覧']]],
-  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断']]],
+  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断'],['arena','アリーナ作戦']]],
   ['roster','手持ちデータ',[['members','メンバー'],['snaps','スナップ'],['inv','持ちもの'],['settings','プレイヤー情報'],...(PUBLIC?[]:[['event','イベント']])]]];
 const TABS=TAB_GROUPS.flatMap(g=>g[2]);
 const tabGroup=id=>TAB_GROUPS.find(g=>g[2].some(x=>x[0]===id))||TAB_GROUPS[0];
@@ -1757,11 +1760,107 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
 
 function render(){
   renderTabs();
-  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,gacha:viewGacha,members:viewMembers,snaps:viewSnaps,inv:viewInv,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
+  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,gacha:viewGacha,members:viewMembers,snaps:viewSnaps,inv:viewInv,arena:viewArena,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
   inTab(paintStale);
 }
 
+// ===== アリーナ作戦タブ（2026-11-01〜、仕様 docs/arena-planner-spec.md） =====
+// 段階2: 入力（バンド・撃奏の種類・タイプ・優先度）と ① 種類の診断。
+// 診断: バンドごとに COMBO・LUCK・JUST の勝ち条件の値を、3つの手持ち（今／手持ちを育てきった／リーグの上限＝そのバンドの全カードとスナップ全部を最大）で、
+// そのバンドのアリーナ曲すべてについて「勝ち条件を最高に必須」で最適化して平均する
+const ARP_KINDS=['COMBO','LUCK','JUST'];
+function arpCfg(b){const u=state.ui.arp??={b:{}};u.b??={};return u.b[b]??={on:false,kind:'JUST',type:'all',pri:BAND_NAMES.indexOf(b)+1}}
+const arpBands=()=>BAND_NAMES.filter(b=>arpCfg(b).on).sort((a,b)=>(+arpCfg(a).pri||9)-(+arpCfg(b).pri||9));
+const arpSig=()=>JSON.stringify(arpBands().map(b=>[b,arpCfg(b).type]));
+let arpOut=null;
+// シーズン（マスター MasterArenaSeason、日本時間の文字列）
+const jstTs=s=>{const m=String(s).match(/(\d+)\/(\d+)\/(\d+) (\d+):(\d+):(\d+)/);return m?Date.UTC(+m[1],m[2]-1,+m[3],m[4]-9,+m[5],+m[6]):0};
+function arenaSeason(t=arenaClock()){const L=RES.season||[];return L.find(x=>jstTs(x[0])<=t&&t<=jstTs(x[1]))||null}
+const mdHm=s=>{const m=String(s).match(/\d+\/(\d+)\/(\d+) (\d+):(\d+)/);return m?`${+m[1]}/${+m[2]} ${m[3]}:${m[4]}`:s};
+// 勝ち条件の値の表示
+const arpMet=(k,v)=>v==null?'—':k==='LUCK'?fmt(Math.round(v)):k==='COMBO'?'+'+cbf(v):(+v).toFixed(2);
+const ARP_MET_LABEL={COMBO:'COMBO数の上乗せ合計',LUCK:'LUCK値',JUST:'区間の強さ（推定JUST率×(1＋JUST数獲得量の上乗せ)）'};
+// 3つの手持ち
+function arpRoster(scen,band,base){const R=JSON.parse(JSON.stringify(base));if(scen==='now')return R;
+  const maxM=c=>{const n=c.lim.length;return{own:1,lv:c.lim[n-1],tr:n,rk:5,sl:5,gl:5}};
+  for(const c of CAT.members){if(c.band!==band)continue;const r=R.m[c.id];
+    if(scen==='league'||(r&&r.own))R.m[c.id]={...(r||{}),...maxM(c),lock:r?.lock||0,excl:scen==='league'?0:r?.excl||0}}
+  for(const c of CAT.snaps){const r=R.s[c.id];
+    if(scen==='league')R.s[c.id]={own:1,rk:c.rk.length,lv:c.rk[c.rk.length-1][0]};
+    else if(r&&r.own)R.s[c.id]={...r,lv:c.rk[(r.rk||1)-1][0]}}// 上限解放はダブりが要るので、今の上限解放でLvだけ最大
+  return R}
+// 1曲・1種類・1つの手持ちで、勝ち条件を最高に必須にして最適化
+function arpSolve(song,band,kind,type){const st=state.settings,keep={r:st.arenaRule,c:st.gkComboReq,l:st.gkLuckReq,j:st.gkJustReq},ch=state.ui.chSong;
+  const g=arenaReg(band);st.arenaRule={...(keep.r||{}),[band]:{...(g?{at:g[0]}:{}),gk:kind,type}};
+  st.gkComboReq=kind==='COMBO'?'max':'';st.gkLuckReq=kind==='LUCK'?'max':'';st.gkJustReq=kind==='JUST'?'max':'';state.ui.chSong='none';
+  try{seedRnd(12345);const r=withFast(()=>solve(song,'arena'));if(!r||r.error||!r.best)return null;const e=r.best.e;
+    const met=kind==='COMBO'?e.cb:kind==='LUCK'?(r.lkMax??e.lk):(r.jsMax??e.js);
+    return{met:met||0,score:e.score,sec:e.sec,team:r.best.t.m.map(i=>M[i]?.cid),snaps:r.best.t.s.map(i=>S[i]&&!S[i].none?S[i].cid:null)}}
+  catch(err){return null}
+  finally{if(keep.r===undefined)delete st.arenaRule;else st.arenaRule=keep.r;st.gkComboReq=keep.c;st.gkLuckReq=keep.l;if(keep.j===undefined)delete st.gkJustReq;else st.gkJustReq=keep.j;state.ui.chSong=ch}}
+const arenaSongsOf=b=>state.songs.filter(s=>s.band===b&&arenaSong(s)&&MY_DATA.arena?.gk?.[s.name]);
+function startArenaDiag(){const id=++toolRun,bands=arpBands();if(!bands.length){arpOut={err:'バンドを1つ以上選んでください。'};render();return}
+  const jobs=[];for(const b of bands){const songs=arenaSongsOf(b);for(const kind of ARP_KINDS)for(const scen of ['now','own','league'])for(const s of songs)jobs.push({b,kind,scen,s})}
+  arpOut={sig:arpSig(),bands,jobs,res:{},done:0,total:jobs.length,phase:'run'};paintArena();
+  // 仮の手持ちに差し替えるのは1回の区切り（約0.1秒）の中だけ。区切りの終わりで必ず元に戻す（途中で保存されても本物の手持ちのまま）
+  const step=()=>{if(id!==toolRun)return;const keep=state.roster,t0=Date.now();let cur=null;
+    try{while(arpOut.done<arpOut.total&&Date.now()-t0<120){const j=arpOut.jobs[arpOut.done],key=j.scen+'|'+j.b;
+      if(cur!==key){state.roster=arpRoster(j.scen,j.b,keep);materialize();cur=key}
+      const r=arpSolve(j.s,j.b,j.kind,arpCfg(j.b).type);((arpOut.res[j.b]??={})[j.kind]??={})[j.scen]??=[];if(r)arpOut.res[j.b][j.kind][j.scen].push(r);arpOut.done++}}
+    finally{state.roster=keep;materialize()}
+    if(arpOut.done>=arpOut.total){arpOut.phase='done';arpFinish();paintArena();return}
+    paintArena();setTimeout(step,0)};
+  setTimeout(step,30)}
+// 集計: 平均の勝ち条件・スコアと、「上限に届くまで」（育てきった最適編成で撃奏Lvが5未満のその種類のメンバー → 撃奏Lv5 の素材）・足りないカード
+// 撃奏Lvを5にすると勝ち条件が変わるか（COMBO・JUST は上乗せの効く秒数や「何回ごと」、LUCK は中身 gd がLvで違うか）
+function glMatters(c,kind,gl){const L=kind==='COMBO'?(c.cbs||[]).map((x,i)=>[x,c.cb?.[i]]):kind==='JUST'?c.jb:c.gd;if(!L)return kind==='LUCK';return JSON.stringify(L[gl-1])!==JSON.stringify(L[4])}
+// 値の差がほぼ無いか（0.5%未満）
+const arpNear=(a,b)=>Math.abs(a-b)<=Math.max(Math.abs(b)*0.005,1e-6);
+function arpFinish(){for(const b of arpOut.bands)for(const kind of ARP_KINDS){const X=arpOut.res[b]?.[kind];if(!X)continue;
+  const avg=(L,f)=>L&&L.length?L.reduce((a,x)=>a+(f(x)||0),0)/L.length:null;
+  for(const sc of ['now','own','league']){const L=X[sc];X[sc+'Met']=avg(L,x=>x.met);X[sc+'Score']=avg(L,x=>x.score);X[sc+'Sec']=avg(L,x=>x.sec)}
+  // 撃奏Lv5にするメンバー（育てきった編成に入る、その種類の撃奏スキル持ちで今の撃奏Lvが5未満）
+  const need=new Set();for(const x of X.own||[])for(const cid of x.team){const c=CM[cid],r=state.roster.m[cid];if(c&&r?.own&&c.geki===kind&&(r.gl||1)<5&&glMatters(c,kind,r.gl||1))need.add(cid)}
+  const sum={it:{},pc:0,sexp:0,dup:false};for(const cid of need){const r=state.roster.m[cid],c=growCost('m',cid,r,{...r,gl:5});for(const id in c.it)sum.it[id]=(sum.it[id]||0)+c.it[id]}
+  X.glNeed=[...need];X.glCost=sum;X.glUse=need.size?sealUse('m',[...need][0],sum):null;
+  // リーグの上限の編成に入る、持っていないカード（メンバーと判定幅スナップ）
+  const miss=new Set();for(const x of X.league||[]){for(const cid of x.team)if(!state.roster.m[cid]?.own)miss.add('m'+cid);if(kind==='JUST')for(const sid of x.snaps)if(sid!=null&&!state.roster.s[sid]?.own&&CSN[sid]?.gj)miss.add('s'+sid)}
+  X.miss=[...miss]}}
+function paintArena(){const el=document.getElementById('arpRes');if(el)el.innerHTML=arpResHtml();const b=document.querySelector('[data-act="arenaDiag"]');if(b)b.disabled=!!(arpOut&&arpOut.phase==='run')}
+function arpResHtml(){const O=arpOut;if(!O)return'';if(O.err)return`<div class="panel muted">${esc(O.err)}</div>`;
+  if(O.phase==='run')return`<section class="panel"><p class="muted">計算中… ${O.done} / ${O.total}（バンド×3種類×3つの手持ち×アリーナ曲）<button class="btn small" data-act="arenaStop">止める</button></p></section>`;
+  const stale=O.sig!==arpSig()?'<p class="note warn">入力が変わったので計算し直してください（下は前回の結果）。</p>':'';
+  return stale+O.bands.map(b=>{const cfg=arpCfg(b),n=arenaSongsOf(b).length;
+    const rows=ARP_KINDS.map(k=>{const X=O.res[b]?.[k]||{},sel=k===cfg.kind;
+      const short=X.leagueMet!=null&&X.ownMet!=null&&X.ownMet<X.leagueMet&&!arpNear(X.ownMet,X.leagueMet),reach=X.ownMet!=null&&X.nowMet!=null&&X.nowMet<X.ownMet&&!arpNear(X.nowMet,X.ownMet);
+      const missTxt=X.miss?.length?X.miss.map(k2=>{const c=k2[0]==='m'?CM[k2.slice(1)]:CSN[k2.slice(1)];return c?`${c.chara||'スナップ'}${c.rarity}「${c.title}」`:''}).join('、'):'';
+      const glTxt=reach&&X.glNeed?.length?`撃奏Lv5：${X.glNeed.map(cid=>`${CM[cid].chara}${CM[cid].rarity}`).join('・')}（${esc(costText('m',X.glCost))}${invMissing().length?'':`、使うシール ${fmt(X.glUse?.seal||0)}`}）`:(reach?'育成で届く（撃奏Lv以外の強化）':'届いている');
+      return`<tr${sel?' class="sel"':''}><td><b>${k}</b>${sel?' <span class="pill">選択中</span>':''}</td>
+        <td class="num">${arpMet(k,X.leagueMet)}</td><td class="num">${arpMet(k,X.nowMet)} → ${arpMet(k,X.ownMet)}</td>
+        <td style="font-size:12px">${esc(glTxt)}${short?`<br><span class="warn">上限に届かない${missTxt?'：'+esc(missTxt)+' が無い':''}</span>`:''}</td>
+        <td class="num">${X.nowSec!=null?fmt(X.nowSec):'—'}<br><span class="muted">${X.nowScore!=null?fmt(X.nowScore):''}</span></td>
+        <td style="font-size:12px">同じ数なら区間スコア</td></tr>`}).join('');
+    const X=O.res[b]?.[cfg.kind]||{},warn=X.leagueMet!=null&&X.ownMet!=null&&X.ownMet<X.leagueMet&&!arpNear(X.ownMet,X.leagueMet);
+    return`<section class="panel stack"><h3 style="margin:0">${esc(b)} <span class="muted" style="font-size:13px;font-weight:500">（タイプ ${cfg.type==='all'?'ALL':esc(cfg.type)}・アリーナ曲 ${n}曲の平均）</span></h3>
+      ${warn?`<p class="note warn">選んだ ${cfg.kind} は、手持ちを育てきってもリーグの上限に届きません。</p>`:''}
+      <div class="tbl"><table><thead><tr><th>種類</th><th class="num">リーグの上限</th><th class="num">自分の今 → 育成後の最大</th><th>上限に届くまで</th><th class="num">区間スコア<br><span class="muted">推定スコア</span></th><th>同点のとき</th></tr></thead><tbody>${rows}</tbody></table></div></section>`}).join('')+
+    `<p class="note">勝ち条件の値：COMBO＝${ARP_MET_LABEL.COMBO}（撃奏Lv1〜4で区間の最初の数秒しか効かないスキルは、効く秒数の割合で数える）、LUCK＝${ARP_MET_LABEL.LUCK}（LUCKポイントの代わりの指標）、JUST＝${ARP_MET_LABEL.JUST}。それぞれ「最高に必須」で最適化した編成の値で、区間スコア・推定スコアは今の手持ちでその編成のときの値です。「育成後の最大」は持っているカードをすべて最大まで育てた場合（スナップの上限解放はダブりが要るので今のまま）、「リーグの上限」はそのバンドの全カードとスナップ全部を最大にした場合です。</p>`}
+function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOut&&arpOut.phase==='run';
+  const rows=BAND_NAMES.map(b=>{const c=arpCfg(b);return`<tr><td><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-arp="${esc(b)}" data-f="on"${c.on?' checked':''}>${esc(b)}</label></td>
+    <td><select data-arp="${esc(b)}" data-f="kind">${opts(ARP_KINDS,c.kind)}</select></td>
+    <td><select data-arp="${esc(b)}" data-f="type">${opts([['all','ALL'],...TYPES.map(t=>[t,t])],c.type)}</select></td>
+    <td><input type="number" min="1" max="5" step="1" data-arp="${esc(b)}" data-f="pri" value="${c.pri}" style="width:56px"></td></tr>`}).join('');
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">アリーナ作戦</h2>
+    <p class="note">撃奏アリーナで、バンドごとに選んだ撃奏の種類で勝つための作戦を立てます。区間の順位は COMBO数・JUST数・LUCKポイントで決まり、同じ数なら区間スコアで決まります。アリーナはバンド別のリーグなので、相手も同じバンドのメンバーだけを使います（スナップは制限なし）。</p>
+    ${se?`<p class="note">シーズン：<b>${esc(se[2])}</b>（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
+    <div class="tbl"><table><thead><tr><th>バンド</th><th>撃奏の種類</th><th>タイプ</th><th>優先度</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
+    <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button></div></section>
+  <div id="arpRes">${arpResHtml()}</div></div>`}
+function arpInput(el){if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
+  c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
+function arpAct(a){if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
 // JSON取り込み: 全体のバックアップ（songs と roster を含む）なら置き換え、それ以外は書いてある項目だけ上書き
 function importData(o){
   if(!o||typeof o!=='object')throw 0;
@@ -1800,7 +1899,7 @@ document.addEventListener('click',e=>{
   const hp=e.target.closest('[data-help]');if(hp){if(matchMedia('(hover:hover)').matches)return;const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
-  if(invAct(a,e.target.closest('[data-act]'))){save();render();return}
+  if(invAct(a,e.target.closest('[data-act]'))||arpAct(a)){save();render();return}
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
   switch(a){
     case'useAuthor':if(Object.values(state.roster.m).some(r=>r.own)&&state.rosterSrc!=='author'&&!confirm('今の手持ちの登録を、作者の手持ちに置き換えますか？（先に「ファイルに書き出す」で控えを取れます）'))return;useAuthor();lastResult=idealRes=null;break;
@@ -1831,7 +1930,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const el=e.target;
-  if(invInput(el))return;
+  if(invInput(el)||arpInput(el))return;
   if(el.id.startsWith('idf-')){state.ui.idealF={...idealF(),[el.id.slice(4)]:el.checked};save();return}
   if(el.id==='gst'){state.ui.gst=el.value;save();return}
   if(el.id==='obj'){state.ui.obj=el.value;save();render();return}
