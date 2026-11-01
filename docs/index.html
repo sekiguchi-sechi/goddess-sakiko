@@ -1440,7 +1440,8 @@ const itemName=id=>RES.items[id]||('アイテム'+id);
 const SHOP={};for(const [id,n,price,lim] of RES.shop){const o=SHOP[id];if(!o||price/n<o[1]/o[0])SHOP[id]=[n,price,lim]}
 // バンドのメンバーピース(SSR)（交換所の 20000003 など）: バンド名 → アイテムID
 const BAND_SSR_PIECE=Object.fromEntries(BAND_NAMES.map(b=>[b,+Object.keys(RES.items).find(id=>RES.items[id]===b+'のメンバーピース(SSR)')||0]));
-const LIMITED=RES.shop.filter(x=>x[3]>0).map(x=>x[0]);
+// 月の上限がある交換。計画で使うもの（SP券・奇跡のクリスタル・バンドのピース）を先に、ガチャチケットを後ろに
+const LIMITED=RES.shop.filter(x=>x[3]>0).map(x=>x[0]).sort((a,b)=>/ガチャチケット/.test(itemName(a))-/ガチャチケット/.test(itemName(b))||[27,23].indexOf(b)-[27,23].indexOf(a));
 // 交換所の月の上限は毎月1日 4:00（日本時間）にリセット。その区切りでの「月」
 function invMonth(t=Date.now()){const d=new Date(t+9*3600e3-4*3600e3);return d.toISOString().slice(0,7)}
 function inv(){const I=state.inv??={it:{},bp:{},mp:[],left:{},at:'',sexp:false};I.it??={};I.bp??={};I.mp??=[];I.left??={};
