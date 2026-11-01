@@ -1799,6 +1799,8 @@ function render(){
 const ARP_KINDS=['COMBO','LUCK','JUST'];
 function arpCfg(b){const u=state.ui.arp??={b:{}};u.b??={};return u.b[b]??={on:false,kind:'JUST',type:'all',pri:BAND_NAMES.indexOf(b)+1}}
 const arpBands=()=>BAND_NAMES.filter(b=>arpCfg(b).on).sort((a,b)=>(+arpCfg(a).pri||9)-(+arpCfg(b).pri||9));
+// 翌月以降にまわす交換（月の上限を超える分）も計画に入れるか（初期値オン）
+const arpLater=()=>(state.ui.arp??={b:{}}).later!==false;
 const arpSig=()=>JSON.stringify(arpBands().map(b=>[b,arpCfg(b).type]));
 let arpOut=null;
 // シーズン（マスター MasterArenaSeason、日本時間の文字列）
@@ -1885,12 +1887,14 @@ function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOu
     <div class="tbl"><table><thead><tr><th>バンド</th><th>撃奏の種類</th><th>タイプ</th><th>優先度</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
     <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button><button class="btn primary" data-act="arenaPlan"${arpPlan&&arpPlan.phase==='run'?' disabled':''}>② 育成プランを計算</button></div>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-arplater${arpLater()?' checked':''}> ② で、翌月以降にまわす交換（今月の残り回数を超える分）も計画に入れる（オフなら今月中に交換できる強化だけ）</label>
     <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます。選ぶたびに候補すべてを、長さ別に選んだアリーナ曲5曲で計算し直し、最後に選んだ強化を全曲で計算し直します。手持ちが多いと数分かかります（進み具合と「止める」ボタンが出ます）。</p></section>
   <div id="arpRes">${mcard(arpResHtml())}</div><div id="arpPlan">${mcard(arpPlanHtml())}</div>${arpDaysHtml()}
   <section class="panel stack"><h3 style="margin:0">④ 持っていないカード（参考）</h3>
     <p class="note">持っていないカードを1枚ずつ、フル育成（特訓・覚醒・スキルLv・撃奏Lv・上限解放をすべて最大）で持っていると仮定して、選んだ種類の最適編成に入るものと伸びを出します。ガチャが要るので計画には入れません。候補はそのバンドの持っていないメンバーと、選んだ種類の撃奏サポートを持つスナップ（JUSTは判定幅スナップも）です。</p>
     <div class="row"><button class="btn small" data-act="arenaMiss"${arpMiss&&arpMiss.phase==='run'?' disabled':''}>④ を計算</button></div><div id="arpMiss">${mcard(arpMissHtml())}</div></section></div>`}
-function arpInput(el){if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
+function arpInput(el){if(el.hasAttribute('data-arplater')){(state.ui.arp??={b:{}}).later=el.checked;save();render();return true}
+  if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
   c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
 function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaMiss'){startArenaMiss();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
 // ===== ② 育成プラン（段階3） =====
@@ -1931,11 +1935,11 @@ async function arpRun(id,R,jobs,onEach){const out=new Array(jobs.length);
   for(let i=0;i<jobs.length;i++){if(id!==toolRun)break;state.roster=R;try{out[i]=arpJob(jobs[i])}finally{state.roster=keep;materialize()}onEach();await new Promise(r=>setTimeout(r,0))}
   return out}
 let arpPlan=null;
-const arpPlanSig=()=>JSON.stringify([arpBands().map(b=>[b,arpCfg(b)]),state.inv,state.roster]).length+'|'+arpSig();
+const arpPlanSig=()=>JSON.stringify([arpBands().map(b=>[b,arpCfg(b)]),state.inv,state.roster]).length+'|'+arpSig()+'|'+arpLater();
 async function startArenaPlan(){const id=++toolRun,bands=arpBands();
   if(!bands.length){arpPlan={err:'バンドを1つ以上選んでください。'};render();return}
   if(invMissing().length){arpPlan={err:'持ちものタブで「今月の交換の残り回数」を入れてください（未入力：'+invMissing().map(itemName).join('、')+'）。'};render();return}
-  const I=JSON.parse(JSON.stringify(inv())),R=JSON.parse(JSON.stringify(state.roster)),P=arpPlan={Iw:I,sig:arpPlanSig(),bands,steps:[],base:{},target:{},fin:{},phase:'run',msg:'',done:0,total:0,seal0:+I.it[SEAL]||0,I0:JSON.parse(JSON.stringify(I))};paintPlan();
+  const I=JSON.parse(JSON.stringify(inv())),R=JSON.parse(JSON.stringify(state.roster)),P=arpPlan={later:arpLater(),Iw:I,sig:arpPlanSig(),bands,steps:[],base:{},target:{},fin:{},phase:'run',msg:'',done:0,total:0,seal0:+I.it[SEAL]||0,I0:JSON.parse(JSON.stringify(I))};paintPlan();
   const tick=()=>{P.done++;paintPlan()};
   try{for(const [bi,b] of bands.entries()){P.bi=bi;P.round=0;P.sb=+I.it[SEAL]||0;P.stage='band';const cfg=arpCfg(b),kind=cfg.kind,type=cfg.type,eps=x=>Math.max(Math.abs(x)*0.005,1e-6);
     P.msg=`${b}：今の値と、育てきったときの勝ち条件を計算中`;P.done=0;P.total=2;paintPlan();
@@ -1943,7 +1947,7 @@ async function startArenaPlan(){const id=++toolRun,bands=arpBands();
     if(!E0){P.base[b]=null;continue}P.base[b]=E0;P.target[b]=Eo?.met??E0.met;let E=E0;
     for(let round=1;round<=40;round++){
       const ups=arpUps(b,R,E.snaps).map(u=>{const to=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(to);const cost=growCost(u.k,u.cid,R[u.k][u.cid],to),use=sealUse(u.k,u.cid,cost,I);return{...u,cost,use,val:sealValue(u.k,u.cid,cost,I)}})
-        .filter(u=>!u.use.short.length&&u.use.seal<=(+I.it[SEAL]||0));
+        .filter(u=>!u.use.short.length&&u.use.seal<=(+I.it[SEAL]||0)&&(P.later||!u.use.months));
       if(!ups.length)break;P.round=round;
       P.msg=`${b}：${round}つ目の強化を選んでいます（候補${ups.length}件 × 長さ別のアリーナ曲${arpPlanSongs(b).length}曲）`;P.done=0;P.total=ups.length;paintPlan();
       const res=await arpRun(id,R,ups.map(u=>({band:b,kind,type,scen:'cand',key:u.key,snaps:E.snaps,few:1})),tick);if(id!==toolRun)return;
@@ -1997,7 +2001,7 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
     `<section class="panel stack"><h3 style="margin:0">交換リスト</h3>
     ${ex.length?`<div class="tbl"><table><thead><tr><th>交換するもの</th><th class="num">回数</th><th class="num">個数</th><th class="num">シール</th><th>今月／翌月以降</th></tr></thead><tbody>
       ${ex.map(x=>`<tr><td>${esc(itemName(x.id))}</td><td class="num">${x.n}回</td><td class="num">${fmt(x.qty)}</td><td class="num">${fmt(x.seal)}</td><td>${x.later?`今月 ${x.now}回・<span class="warn">翌月以降 ${x.later}回（${x.months}か月。毎月1日4:00以降）</span>`:'今月にすべて'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">交換は要りません（手持ちで足ります）。</p>'}
-    <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。翌月以降にまわす交換の分も、今のシールから取っておく前提です。</p>
+    <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。${P.later?'翌月以降にまわす交換の分も、今のシールから取っておく前提です。':'今月中に交換できる強化だけを選んでいます（翌月以降にまわす交換は入れていません）。'}</p>
     <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
     <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
 function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];
