@@ -995,7 +995,7 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
     if(kids.length)h+=`<ul>${kids.map(x=>node([...pre,x.i],x.C,depth+1)).join('')}</ul>`;
     return h+'</li>'};
   const RR=retryRules(O,T,L,nm),m=v=>`${v.toFixed(1)}分`;
-  return`<details class="panel" data-retry${state.ui.retryOpen===true?' open':''}><summary><b>リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
+  return`<details class="panel" data-retry${state.ui.retryOpen===true?' open':''}><summary><b>【簡単】リトライ判断</b> <span class="muted">（発動した順に、続けるかリトライするか）</span></summary>
     <div class="row" style="margin-top:8px;align-items:center"><label class="f" style="flex-direction:row;align-items:center;gap:6px">目標：120通りの上位<input type="number" id="retryTop" value="${pct}" min="1" max="50" step="1" style="width:64px">%</label>
     <span class="muted">＝ スコア ${fmt(T)} 以上（${need}通り）</span></div>
     <h3 style="margin:10px 0 4px">覚えるルール</h3>
@@ -1014,7 +1014,7 @@ function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const
   const dens=song.rt.n&&song.len?song.rt.n/song.len:7;
   const rows=e.slots.map((x,i)=>{const len=(x.m.sec||0)+x.ext,ca=cumAdd(x.m,x.s,dens),c=w5.map(w=>e.P*kf*ca*w),a=wAt(len).map((w,k)=>e.P*kf*x.m.sk*w+c[k]);return{m:x.m,s:x.s,len,ca,c,a,mx:Math.max(...a),best:bp?.[i]}});
   const anyCum=rows.some(r=>r.ca>0);
-  return`<details class="panel" data-slotw${state.ui.slotWOpen===true?' open':''}><summary><b>番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
+  return`<details class="panel" data-slotw${state.ui.slotWOpen===true?' open':''}><summary><b>【詳細】番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
     <div class="tbl" style="margin-top:8px"><table><thead><tr><th></th>${[1,2,3,4,5].map(k=>`<th class="num">${k}番目</th>`).join('')}</tr></thead><tbody>
     <tr><td class="muted">重み（5秒のとき）</td>${w5.map(w=>`<td class="num">${w===top?'<b>':''}${w.toFixed(3)}${w===top?'</b>':''}</td>`).join('')}</tr>
     ${rows.map(r=>`<tr><td>${esc(r.m.chara)} <span class="muted">${Math.round(r.m.sk*100)}%・${+r.len.toFixed(2)}秒</span>${r.ca?`<div class="muted" style="font-size:11px">＋${esc(r.s.name)}（5秒間の平均 +${Math.round(r.ca*100)}%）</div>`:''}</td>${r.a.map((v,k)=>`<td class="num"${r.best===k+1?' style="color:var(--accent)"':''}>${v===r.mx?'<b>':''}+${fmt(v)}${v===r.mx?'</b>':''}${r.ca?`<div class="muted" style="font-size:11px">うち累積 +${fmt(r.c[k])}</div>`:''}</td>`).join('')}</tr>`).join('')}
