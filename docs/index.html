@@ -2150,15 +2150,17 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
     ${P.steps.length?`<p class="note">${P.steps.map((s,i)=>`${i+1}. ${esc(stepCard(s))} ${esc(s.up)}`).join('<br>')}</p>`:''}</section>`;
   const stale=P.sig!==arpPlanSig()?'<p class="note warn">入力（バンドの設定・持ちもの・手持ち）が変わったので計算し直してください（下は前回の結果）。</p>':'';
   const used=P.seal0-(P.I?(+P.I.it[SEAL]||0):P.seal0),ex=arpExchanges(P);
+  let cs=0;const cum=P.steps.map(x=>cs+=+x.use.seal||0);
   const bandHtml=b=>{const cfg=arpCfg(b),B=P.base[b];if(!B)return`<section class="panel"><h3 style="margin:0">${esc(b)}</h3><p class="muted">計算できませんでした（手持ちのメンバーが5人未満など）。</p></section>`;
     const L=P.steps.map((s,i)=>({s,i})).filter(x=>x.s.band===b),b0=B.v||B,last=L.length?(L[L.length-1].s.v||L[L.length-1].s.after):b0;
     let prev=b0;const rows=L.map(({s,i},n)=>{const v=s.v||s.after,r=`<tr${s.done?' class="sel"':''}><td>${n+1}</td><td>${s.need?'<span class="pill">必須</span>':'スコア'}</td><td>${esc(stepCard(s))}</td><td>${esc(s.up)}</td>
       <td class="num">${arpMet(s.kind,prev.met)} → ${arpMet(s.kind,v.met)}</td><td class="num">${pctS(prev.sec,v.sec)}</td><td class="num">${pctS(prev.score,v.score)}</td>
       <td style="font-size:12px">${esc(costText(s.k,s.cost))}</td><td class="num">${fmt(Math.round(s.val))}</td><td class="num">${fmt(s.use.seal)}${s.use.months?`<br><span class="muted">翌月以降 ${s.use.months}か月</span>`:''}</td>
+      <td class="num">${fmt(cum[i])}</td>
       <td>${s.done?'✓':`<button class="btn small" data-act="arpDone" data-i="${i}">やった</button>`}</td></tr>`;prev=v;return r}).join('');
     return`<section class="panel stack"><h3 style="margin:0">${esc(b)} <span class="muted" style="font-size:13px;font-weight:500">（${cfg.kind}・タイプ ${cfg.type==='all'?'ALL':esc(cfg.type)}・優先度 ${cfg.pri}）</span></h3>
       <p class="note">勝ち条件（${ARP_MET_LABEL[cfg.kind]}）：${arpMet(cfg.kind,b0.met)} → <b>${arpMet(cfg.kind,last.met)}</b>（育てきったときの最大 ${arpMet(cfg.kind,P.target[b])}）／区間スコア ${fmt(b0.sec)} → <b>${fmt(last.sec)}</b>（${pctS(b0.sec,last.sec)}）／推定スコア ${fmt(b0.score)} → ${fmt(last.score)}（${pctS(b0.score,last.score)}）</p>
-      ${rows?`<div class="tbl"><table><thead><tr><th>#</th><th>段</th><th>カード</th><th>強化</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th><th>素材</th><th class="num">値段</th><th class="num">使うシール</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
+      ${rows?`<div class="tbl"><table><thead><tr><th>#</th><th>段</th><th>カード</th><th>強化</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th><th>素材</th><th class="num">値段</th><th class="num">使うシール</th><th class="num">累計</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
       <div class="row"><button class="btn small" data-act="arpShow" data-b="${esc(b)}">この条件で編成を見る</button></div></section>`};
   return stale+(P.err2?`<p class="note warn">${esc(P.err2)}</p>`:'')+P.bands.map(bandHtml).join('')+
     `<section class="panel stack"><h3 style="margin:0">交換リスト</h3>
@@ -2166,9 +2168,9 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
       ${ex.map(x=>`<tr><td>${esc(itemName(x.id))}</td><td class="num">${x.n}回</td><td class="num">${fmt(x.qty)}</td><td class="num">${fmt(x.seal)}</td><td>${x.later?`今月 ${x.now}回・<span class="warn">翌月以降 ${x.later}回（${x.months}か月。毎月1日4:00以降）</span>`:'今月にすべて'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">交換は要りません（手持ちで足ります）。</p>'}
     <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。${P.later?'翌月以降にまわす交換の分も、今のシールから取っておく前提です。':'今月中に交換できる強化だけを選んでいます（翌月以降にまわす交換は入れていません）。'}</p>
     <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
-    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
-function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];
-  for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.filter(s=>s.band===b).forEach((s,i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}）`))}
+    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「累計」は上の行（優先度の高いバンドを含む）から順にやったときの使うシールの合計です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
+function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];let cs=0;const cum=P.steps.map(x=>cs+=+x.use.seal||0);
+  for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.map((s,j)=>[s,j]).filter(([s])=>s.band===b).forEach(([s,j],i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}・累計 ${fmt(cum[j])}）`))}
   L.push('','■ 交換リスト');for(const x of arpExchanges(P))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`);
   return L.join('\n')}
 // ボタン。true＝保存して描き直す／'done'＝処理済み（描き直さない）／false＝ここの担当ではない
