@@ -1522,7 +1522,7 @@ function viewInv(){const I=inv(),miss=invMissing(),num=(path,v,w=96)=>`<input ty
   const bp=`<div class="tbl"><table><thead><tr><th>バンドピース</th>${PIECE_RARS.map(r=>`<th class="num">${r}</th>`).join('')}</tr></thead><tbody>
     ${BAND_NAMES.map(b=>`<tr><td>${esc(b)}</td>${PIECE_RARS.map(r=>`<td class="num">${num('bp.'+b+'.'+r,I.bp[b]?.[r],72)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   const cards=[...CAT.members].sort((a,b)=>BAND_NAMES.indexOf(a.band)-BAND_NAMES.indexOf(b.band)||(a.chara>b.chara?1:-1));
-  const mp=`<div class="stack">${I.mp.map(([cid,n],i)=>`<div class="row"><select data-invmp="${i}"><option value="">カードを選ぶ</option>${cards.map(c=>`<option value="${c.id}"${String(c.id)===String(cid)?' selected':''}>${esc(c.chara)} ${esc(c.rarity)}「${esc(c.title)}」</option>`).join('')}</select>
+  const mp=`<div class="stack"><datalist id="mpCards">${cards.map(c=>`<option value="${esc(mpLabel(c))}"></option>`).join('')}</datalist>${I.mp.map(([cid,n],i)=>`<div class="row"><input type="search" list="mpCards" data-invmp="${i}" value="${esc(CM[cid]?mpLabel(CM[cid]):'')}" placeholder="キャラ名・カード名・バンド名で検索" style="flex:1;min-width:220px" autocomplete="off">
     <input type="number" min="0" step="1" data-invmpn="${i}" value="${n??''}" style="width:88px"> 個 <button class="btn small" data-act="invDelMp" data-i="${i}">削除</button></div>`).join('')}
     <div><button class="btn small" data-act="invAddMp">メンバーピースを追加</button></div></div>`;
   return`<div class="stack">
@@ -1537,11 +1537,15 @@ function viewInv(){const I=inv(),miss=invMissing(),num=(path,v,w=96)=>`<input ty
   <section class="panel stack"><h3 style="margin:0">ピース（覚醒用）</h3>
     <p class="note">覚醒1段に 60・120・180・240個（1→5で600個）。使う順は メンバーピース（そのカード専用）→ バンドピース（同じバンド・同じレア度のカードだけ）→ 汎用のメンバーピース（同じレア度ならどのカードにも）→ 星のシールで交換するバンドのメンバーピース(SSR)（SSRカードだけ・1個100シール）。ガチャのダブりは計画に入れません。</p>
     ${bp}<div class="row">${['SR','SSR','BD'].map(r=>`<label class="f">汎用のメンバーピース(${r})${num('it.'+GEN_PIECE[r],I.it[GEN_PIECE[r]],120)}</label>`).join('')}</div><h3 style="margin:0">メンバーピース</h3>${mp}</section></div>`}
+// メンバーピースのカード選択（入力欄＋候補リスト）の表示名。キャラ・レア度・カード名・バンドで検索できる
+const mpLabel=c=>`${c.chara} ${c.rarity}「${c.title}」（${c.band}）`;
 // 入力の反映（80-actions の change から呼ぶ）。true を返したら処理済み
 function invInput(el){const I=inv();
   if(el.dataset.inv!=null){const v=el.value===''?'':Math.max(0,Math.floor(+el.value||0));setPath(I,el.dataset.inv,v);if(el.dataset.inv.startsWith('left.'))I.at=invMonth();delete I.reset;save();
     if(el.dataset.inv.startsWith('left.'))render();return true}
-  if(el.dataset.invmp!=null){const i=+el.dataset.invmp;I.mp[i]=[el.value?+el.value:'',I.mp[i]?.[1]??''];save();return true}
+  if(el.dataset.invmp!=null){const i=+el.dataset.invmp,c=CAT.members.find(x=>mpLabel(x)===el.value);
+    if(!c&&el.value){el.setCustomValidity('候補から選んでください');el.reportValidity?.();return true}el.setCustomValidity('');
+    I.mp[i]=[c?c.id:'',I.mp[i]?.[1]??''];save();return true}
   if(el.dataset.invmpn!=null){const i=+el.dataset.invmpn;I.mp[i]=[I.mp[i]?.[0]??'',el.value===''?'':Math.max(0,Math.floor(+el.value||0))];save();return true}
   if(el.hasAttribute('data-invsexp')){I.sexp=el.checked;save();return true}
   return false}
