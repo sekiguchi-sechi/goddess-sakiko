@@ -1957,6 +1957,8 @@ function arpCfg(b){const u=state.ui.arp??={b:{}};u.b??={};return u.b[b]??={on:fa
 const arpBands=()=>BAND_NAMES.filter(b=>arpCfg(b).on).sort((a,b)=>(+arpCfg(a).pri||9)-(+arpCfg(b).pri||9));
 // 翌月以降にまわす交換（月の上限を超える分）も計画に入れるか（初期値オン）
 const arpLater=()=>(state.ui.arp??={b:{}}).later!==false;
+// 複数バンドの計算: false＝優先度の順に素材を分け合う（既定）／true＝バンドごとに今の手持ちから別々に（比較用、2026-11-02）
+const arpSep=()=>!!(state.ui.arp??={b:{}}).sep;
 const arpSig=()=>JSON.stringify(arpBands().map(b=>[b,arpCfg(b).type]));
 let arpOut=null;
 // シーズン（マスター MasterArenaSeason、日本時間の文字列）
@@ -2045,12 +2047,14 @@ function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOu
     <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
     <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button><button class="btn primary" data-act="arenaPlan"${arpPlan&&arpPlan.phase==='run'?' disabled':''}>② 育成プランを計算</button></div>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-arplater${arpLater()?' checked':''}> ② で、翌月以降にまわす交換（今月の残り回数を超える分）も計画に入れる（オフなら今月中に交換できる強化だけ）</label>
-    <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます。選ぶたびに候補すべてを、長さ別に選んだアリーナ曲5曲で計算し直し、最後に選んだ強化を全曲で計算し直します。手持ちが多いと数分かかります（進み具合と「止める」ボタンが出ます）。</p></section>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">② で複数のバンドを選んだとき：<select data-arpsep>${opts([['0','順番に計算（優先度の高いバンドから素材を使う）'],['1','別々に計算（比較用。どのバンドも今の手持ちから）']],arpSep()?'1':'0')}</select></label>
+    <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます（「別々に計算」ではバンドごとに今の手持ちを使い切るまで）。選ぶたびに候補すべてを、長さ別に選んだアリーナ曲5曲で計算し直し、最後に選んだ強化を全曲で計算し直します。手持ちが多いと数分かかります（進み具合と「止める」ボタンが出ます）。</p></section>
   <div id="arpRes">${mcard(arpResHtml())}</div><div id="arpPlan">${mcard(arpPlanHtml())}</div>${arpDaysHtml()}
   <section class="panel stack"><h3 style="margin:0">④ 持っていないカード（参考）</h3>
     <p class="note">持っていないカードを1枚ずつ、フル育成（特訓・覚醒・スキルLv・撃奏Lv・上限解放をすべて最大）で持っていると仮定して、選んだ種類の最適編成に入るものと伸びを出します。ガチャが要るので計画には入れません。候補はそのバンドの持っていないメンバーと、選んだ種類の撃奏サポートを持つスナップ（JUSTは判定幅スナップも）です。</p>
     <div class="row"><button class="btn small" data-act="arenaMiss"${arpMiss&&arpMiss.phase==='run'?' disabled':''}>④ を計算</button></div><div id="arpMiss">${mcard(arpMissHtml())}</div></section></div>`}
 function arpInput(el){if(el.hasAttribute('data-arplater')){(state.ui.arp??={b:{}}).later=el.checked;save();render();return true}
+  if(el.hasAttribute('data-arpsep')){(state.ui.arp??={b:{}}).sep=el.value==='1';save();render();return true}
   if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
   c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
 function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaMiss'){startArenaMiss();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
@@ -2096,13 +2100,13 @@ async function arpRun(id,R,jobs,onEach){const out=new Array(jobs.length);
   for(let i=0;i<jobs.length;i++){if(id!==toolRun)break;state.roster=R;try{out[i]=arpJob(jobs[i])}finally{state.roster=keep;materialize()}onEach();await new Promise(r=>setTimeout(r,0))}
   return out}
 let arpPlan=null;
-const arpPlanSig=()=>JSON.stringify([arpBands().map(b=>[b,arpCfg(b)]),state.inv,state.roster]).length+'|'+arpSig()+'|'+arpLater();
+const arpPlanSig=()=>JSON.stringify([arpBands().map(b=>[b,arpCfg(b)]),state.inv,state.roster]).length+'|'+arpSig()+'|'+arpLater()+'|'+arpSep();
 async function startArenaPlan(){const id=++toolRun,bands=arpBands();
   if(!bands.length){arpPlan={err:'バンドを1つ以上選んでください。'};render();return}
   if(invMissing().length){arpPlan={err:'持ちものタブで「今月の交換の残り回数」を入れてください（未入力：'+invMissing().map(itemName).join('、')+'）。'};render();return}
-  const I=JSON.parse(JSON.stringify(inv())),R=JSON.parse(JSON.stringify(state.roster)),P=arpPlan={later:arpLater(),Iw:I,sig:arpPlanSig(),bands,steps:[],base:{},target:{},fin:{},phase:'run',msg:'',done:0,total:0,seal0:+I.it[SEAL]||0,I0:JSON.parse(JSON.stringify(I))};paintPlan();
+  const sep=arpSep();let I=JSON.parse(JSON.stringify(inv())),R=JSON.parse(JSON.stringify(state.roster));const P=arpPlan={later:arpLater(),sep,Ib:{},Iw:I,sig:arpPlanSig(),bands,steps:[],base:{},target:{},fin:{},phase:'run',msg:'',done:0,total:0,seal0:+I.it[SEAL]||0,I0:JSON.parse(JSON.stringify(I))};paintPlan();
   const tick=()=>{P.done++;paintPlan()};
-  try{for(const [bi,b] of bands.entries()){P.bi=bi;P.round=0;P.sb=+I.it[SEAL]||0;P.stage='band';const cfg=arpCfg(b),kind=cfg.kind,type=cfg.type,eps=x=>Math.max(Math.abs(x)*arpTol(kind),1e-6);
+  try{for(const [bi,b] of bands.entries()){if(sep&&bi){I=JSON.parse(JSON.stringify(P.I0));R=JSON.parse(JSON.stringify(state.roster));P.Iw=I}P.bi=bi;P.round=0;P.sb=+I.it[SEAL]||0;P.stage='band';const cfg=arpCfg(b),kind=cfg.kind,type=cfg.type,eps=x=>Math.max(Math.abs(x)*arpTol(kind),1e-6);
     P.msg=`${b}：今の値と、育てきったときの勝ち条件を計算中`;P.done=0;P.total=2;paintPlan();
     const [E0,Eo]=await arpRun(id,R,[{band:b,kind,type,scen:'base',few:1},{band:b,kind,type,scen:'own',few:1}],tick);if(id!==toolRun)return;
     if(!E0){P.base[b]=null;continue}P.base[b]=E0;P.target[b]=Eo?.met??E0.met;let E=E0;
@@ -2122,11 +2126,11 @@ async function startArenaPlan(){const id=++toolRun,bands=arpBands();
       const {u,e}=pick,from=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(R[u.k][u.cid]);const U=invApply(I,u.k,u.cid,u.cost);
       P.steps.push({band:b,kind,type,k:u.k,cid:u.cid,up:u.up,cat:u.cat,need,from,to:JSON.parse(JSON.stringify(R[u.k][u.cid])),cost:u.cost,val:u.val,use:U,before:E,after:e,seal:+I.it[SEAL]||0});
       E=e;paintPlan()}
-    P.fin[b]=E}P.bi=bands.length;
+    P.fin[b]=E;P.Ib[b]=I}P.bi=bands.length;
     // 強めの探索で計算し直す: 各バンドの元の手持ちと、選んだ強化を順に足した手持ち
     const jobs=[],at=[];const Rv=JSON.parse(JSON.stringify(state.roster));
-    for(const b of bands){const cfg=arpCfg(b);jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,-1]);
-      P.steps.forEach((s,i)=>{const r=Rv[s.k][s.cid]={...Rv[s.k][s.cid],...s.to};if(s.band===b){jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,i])}})}
+    for(const b of bands){const cfg=arpCfg(b);if(sep)Object.assign(Rv,JSON.parse(JSON.stringify(state.roster)));jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,-1]);
+      P.steps.forEach((s,i)=>{if(sep&&s.band!==b)return;const r=Rv[s.k][s.cid]={...Rv[s.k][s.cid],...s.to};if(s.band===b){jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,i])}})}
     P.stage='verify';P.msg='選んだ強化を、強めの探索で計算し直しています';P.done=0;P.total=jobs.length;paintPlan();
     const V=await arpRun(id,state.roster,jobs,tick);if(id!==toolRun)return;
     V.forEach((r,i)=>{const [b,si]=at[i];if(si<0)P.base[b]={...P.base[b],v:r};else P.steps[si].v=r})
@@ -2140,8 +2144,10 @@ function arpPct(P){const nb=P.bands.length||1;let x;
   else{const cur=P.total?P.done/P.total:0,sealF=P.sb>0?(P.sb-(+P.Iw?.it[SEAL]||0))/P.sb:0,w=Math.min(0.99,Math.max(sealF,((P.round||1)-1+cur)/40));x=0.9*((P.bi||0)+w)/nb}
   P.pct=Math.max(P.pct||0,Math.min(1,x));return P.pct}
 function paintPlan(){const el=document.getElementById('arpPlan');if(el)el.innerHTML=mcard(arpPlanHtml());const b=document.querySelector('[data-act="arenaPlan"]');if(b)b.disabled=!!(arpPlan&&arpPlan.phase==='run')}
-// 交換リスト（計画全体）: アイテムごとの回数と、今月の残り回数で今月にできる分／翌月以降
-function arpExchanges(P){const m=new Map();for(const s of P.steps)for(const [id,n] of s.use.ex)m.set(id,(m.get(id)||0)+n);
+// 使うシールの累計（順番に＝計画全体の上から／別々に＝バンドごと）
+function arpCum(P){const t={};return P.steps.map(x=>{const k=P.sep?x.band:'';return t[k]=(t[k]||0)+(+x.use.seal||0)})}
+// 交換リスト（計画全体。別々に計算したときはバンドごと）: アイテムごとの回数と、今月の残り回数で今月にできる分／翌月以降
+function arpExchanges(P,band){const m=new Map();for(const s of P.steps)if(band==null||s.band===band)for(const [id,n] of s.use.ex)m.set(id,(m.get(id)||0)+n);
   return[...m].map(([id,n])=>{const s=SHOP[id],lim=s[2],left=lim?+(P.I0.left[id]??lim):Infinity,now=Math.min(n,left);return{id,n,qty:n*s[0],seal:n*s[1],now,later:n-now,months:lim&&n>now?Math.ceil((n-now)/lim):0}})}
 const stepCard=s=>{const c=(s.k==='m'?CM:CSN)[s.cid];return c?(s.k==='m'?`${c.chara}${c.rarity}「${c.title}」`:`スナップ「${c.title}」`):''};
 const pctS=(a,b)=>a&&b?pct(b/a-1):'—';
@@ -2150,7 +2156,10 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
     ${P.steps.length?`<p class="note">${P.steps.map((s,i)=>`${i+1}. ${esc(stepCard(s))} ${esc(s.up)}`).join('<br>')}</p>`:''}</section>`;
   const stale=P.sig!==arpPlanSig()?'<p class="note warn">入力（バンドの設定・持ちもの・手持ち）が変わったので計算し直してください（下は前回の結果）。</p>':'';
   const used=P.seal0-(P.I?(+P.I.it[SEAL]||0):P.seal0),ex=arpExchanges(P);
-  let cs=0;const cum=P.steps.map(x=>cs+=+x.use.seal||0);
+  const cum=arpCum(P);
+  const exHtml=(ex,used)=>`${ex.length?`<div class="tbl"><table><thead><tr><th>交換するもの</th><th class="num">回数</th><th class="num">個数</th><th class="num">シール</th><th>今月／翌月以降</th></tr></thead><tbody>
+      ${ex.map(x=>`<tr><td>${esc(itemName(x.id))}</td><td class="num">${x.n}回</td><td class="num">${fmt(x.qty)}</td><td class="num">${fmt(x.seal)}</td><td>${x.later?`今月 ${x.now}回・<span class="warn">翌月以降 ${x.later}回（${x.months}か月。毎月1日4:00以降）</span>`:'今月にすべて'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">交換は要りません（手持ちで足ります）。</p>'}
+    <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。${P.later?'翌月以降にまわす交換の分も、今のシールから取っておく前提です。':'今月中に交換できる強化だけを選んでいます（翌月以降にまわす交換は入れていません）。'}</p>`;
   const bandHtml=b=>{const cfg=arpCfg(b),B=P.base[b];if(!B)return`<section class="panel"><h3 style="margin:0">${esc(b)}</h3><p class="muted">計算できませんでした（手持ちのメンバーが5人未満など）。</p></section>`;
     const L=P.steps.map((s,i)=>({s,i})).filter(x=>x.s.band===b),b0=B.v||B,last=L.length?(L[L.length-1].s.v||L[L.length-1].s.after):b0;
     let prev=b0;const rows=L.map(({s,i},n)=>{const v=s.v||s.after,r=`<tr${s.done?' class="sel"':''}><td>${n+1}</td><td>${s.need?'<span class="pill">必須</span>':'スコア'}</td><td>${esc(stepCard(s))}</td><td>${esc(s.up)}</td>
@@ -2163,15 +2172,14 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
       ${rows?`<div class="tbl"><table><thead><tr><th>#</th><th>段</th><th>カード</th><th>強化</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th><th>素材</th><th class="num">値段</th><th class="num">使うシール</th><th class="num">累計</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
       <div class="row"><button class="btn small" data-act="arpShow" data-b="${esc(b)}">この条件で編成を見る</button></div></section>`};
   return stale+(P.err2?`<p class="note warn">${esc(P.err2)}</p>`:'')+P.bands.map(bandHtml).join('')+
-    `<section class="panel stack"><h3 style="margin:0">交換リスト</h3>
-    ${ex.length?`<div class="tbl"><table><thead><tr><th>交換するもの</th><th class="num">回数</th><th class="num">個数</th><th class="num">シール</th><th>今月／翌月以降</th></tr></thead><tbody>
-      ${ex.map(x=>`<tr><td>${esc(itemName(x.id))}</td><td class="num">${x.n}回</td><td class="num">${fmt(x.qty)}</td><td class="num">${fmt(x.seal)}</td><td>${x.later?`今月 ${x.now}回・<span class="warn">翌月以降 ${x.later}回（${x.months}か月。毎月1日4:00以降）</span>`:'今月にすべて'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">交換は要りません（手持ちで足ります）。</p>'}
-    <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。${P.later?'翌月以降にまわす交換の分も、今のシールから取っておく前提です。':'今月中に交換できる強化だけを選んでいます（翌月以降にまわす交換は入れていません）。'}</p>
+    `<section class="panel stack"><h3 style="margin:0">交換リスト${P.sep?'（バンドごと・別々に計算）':''}</h3>
+    ${P.sep?P.bands.map(b=>`<h4 style="margin:4px 0 0">${esc(b)}</h4>`+exHtml(arpExchanges(P,b),P.seal0-(+P.Ib?.[b]?.it[SEAL]||0))).join('')+'<p class="note">別々に計算したので、交換・シールはバンドごとの量です（合計はできません。どれか1つのバンドを選んでやる前提）。</p>':exHtml(ex,used)}
     <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
-    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「累計」は上の行（優先度の高いバンドを含む）から順にやったときの使うシールの合計です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
-function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];let cs=0;const cum=P.steps.map(x=>cs+=+x.use.seal||0);
+    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「累計」は上の行から順にやったときの使うシールの合計です（順番に計算したときは優先度の高いバンドの分を含み、別々に計算したときはバンドごと）。別々に計算したときは、どのバンドも今の手持ちから選んでいるので、2つ以上のバンドをやると素材が足りなくなることがあります。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
+function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];const cum=arpCum(P);
   for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.map((s,j)=>[s,j]).filter(([s])=>s.band===b).forEach(([s,j],i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}・累計 ${fmt(cum[j])}）`))}
-  L.push('','■ 交換リスト');for(const x of arpExchanges(P))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`);
+  const exL=(t,b)=>{L.push('',t);for(const x of arpExchanges(P,b))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`)};
+  if(P.sep){L.splice(1,0,'（バンドごとに別々に計算・比較用）');for(const b of P.bands)exL(`■ 交換リスト（${b}）`,b)}else exL('■ 交換リスト');
   return L.join('\n')}
 // ボタン。true＝保存して描き直す／'done'＝処理済み（描き直さない）／false＝ここの担当ではない
 function arpPlanAct(a,el){const P=arpPlan;
