@@ -527,8 +527,8 @@ function leadCnt(L,ms){const l=L.lead.find(x=>x.k==='cnt');if(!l)return 0;const 
 // ノーツごとの段数＝それより前の PERFECT 数÷回数（切り捨て）。5秒間のノーツ数は曲の平均密度（ノーツ数÷長さ）から。AP 前提で全ノーツ PERFECT 以上。
 // 返り値は5秒間の平均の上乗せ（スキル%と同じ単位、1=100%）。haneoka エンジンはこの効果に未対応（support:74:2001）なので、ここだけの見積もり
 const CUM_CACHE=new Map();
-function cumAdd(m,s){const c=s.cum;if(!c)return 0;const band=s.band&&s.band===m.band,every=band?c[3]:c[1],mx=band?c[4]:c[2];
-  const N=Math.max(1,Math.round((CTX.dens||7)*5)),key=c[0]+'|'+every+'|'+mx+'|'+N;let v=CUM_CACHE.get(key);
+function cumAdd(m,s,dens){const c=s?.cum;if(!c)return 0;const band=s.band&&s.band===m.band,every=band?c[3]:c[1],mx=band?c[4]:c[2];
+  const N=Math.max(1,Math.round((dens||CTX.dens||7)*5)),key=c[0]+'|'+every+'|'+mx+'|'+N;let v=CUM_CACHE.get(key);
   if(v==null){let sum=0;for(let k=0;k<N;k++)sum+=Math.min(mx,Math.floor(k/every));v=c[0]/100*sum/N;CUM_CACHE.set(key,v)}return v}
 function ev(t){
   const L=M[t.m[t.L]],{TL,VIP,K,T,SE,gk}=CTX,LN=leadCnt(L,t.m.map(i=>M[i]));let P=0,Sk=0,pt=0,it=0,GB=0;const slots=[],ys=[];
@@ -1010,13 +1010,16 @@ function retryHtml(e,song){if(!e.ord||e.ord.length<2)return'';const nm=e.slots.m
 function slotWeightHtml(e,song){const W=song?.rt?.W;if(!W||!e.ord)return'';const n=W.length,kf=song.kf||1;
   const wAt=sec=>{const x=Math.min(Math.max((sec-5)*4,0),n-1),j=Math.floor(x),f=x-j;return[0,1,2,3,4].map(k=>f?W[j][k]*(1-f)+W[j+1][k]*f:W[j][k])};
   const w5=W[0],top=Math.max(...w5),bp=bestOrderPos(e);
-  const rows=e.slots.map((x,i)=>{const len=(x.m.sec||0)+x.ext,a=wAt(len).map(w=>e.P*kf*x.m.sk*w);return{m:x.m,len,a,mx:Math.max(...a),best:bp?.[i]}});
+  // 累積型のスコアUP（ゴースト・アイズなど）は、スキル発動から5秒間の平均の上乗せ×5秒の重み（40-model.js の prep と同じ）。内訳として下に小さく出す（2026-11-01）
+  const dens=song.rt.n&&song.len?song.rt.n/song.len:7;
+  const rows=e.slots.map((x,i)=>{const len=(x.m.sec||0)+x.ext,ca=cumAdd(x.m,x.s,dens),c=w5.map(w=>e.P*kf*ca*w),a=wAt(len).map((w,k)=>e.P*kf*x.m.sk*w+c[k]);return{m:x.m,s:x.s,len,ca,c,a,mx:Math.max(...a),best:bp?.[i]}});
+  const anyCum=rows.some(r=>r.ca>0);
   return`<details class="panel" data-slotw${state.ui.slotWOpen===true?' open':''}><summary><b>番目ごとの重み</b> <span class="muted">（どの番目にどのスキルを当てると伸びるか）</span></summary>
     <div class="tbl" style="margin-top:8px"><table><thead><tr><th></th>${[1,2,3,4,5].map(k=>`<th class="num">${k}番目</th>`).join('')}</tr></thead><tbody>
     <tr><td class="muted">重み（5秒のとき）</td>${w5.map(w=>`<td class="num">${w===top?'<b>':''}${w.toFixed(3)}${w===top?'</b>':''}</td>`).join('')}</tr>
-    ${rows.map(r=>`<tr><td>${esc(r.m.chara)} <span class="muted">${Math.round(r.m.sk*100)}%・${+r.len.toFixed(2)}秒</span></td>${r.a.map((v,k)=>`<td class="num"${r.best===k+1?' style="color:var(--accent)"':''}>${v===r.mx?'<b>':''}+${fmt(v)}${v===r.mx?'</b>':''}</td>`).join('')}</tr>`).join('')}
+    ${rows.map(r=>`<tr><td>${esc(r.m.chara)} <span class="muted">${Math.round(r.m.sk*100)}%・${+r.len.toFixed(2)}秒</span>${r.ca?`<div class="muted" style="font-size:11px">＋${esc(r.s.name)}（5秒間の平均 +${Math.round(r.ca*100)}%）</div>`:''}</td>${r.a.map((v,k)=>`<td class="num"${r.best===k+1?' style="color:var(--accent)"':''}>${v===r.mx?'<b>':''}+${fmt(v)}${v===r.mx?'</b>':''}${r.ca?`<div class="muted" style="font-size:11px">うち累積 +${fmt(r.c[k])}</div>`:''}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div>
-    <p class="note" style="margin:6px 0 0">重みは「スキル+100%がその番目で発動したときに足すスコア÷総合力」。下の表は、そのメンバーがその番目で発動したときに増えるスコア（スキル%・発動秒数・総合力込み）。太字は各メンバーで一番伸びる番目、金色は最高の発動順での番目。スコアはこの増分の合計＋基礎なので、全員の合計が大きくなる割り当てが最高です。</p></details>`}
+    <p class="note" style="margin:6px 0 0">重みは「スキル+100%がその番目で発動したときに足すスコア÷総合力」。下の表は、そのメンバーがその番目で発動したときに増えるスコア（スキル%・発動秒数・総合力込み）。太字は各メンバーで一番伸びる番目、金色は最高の発動順での番目。スコアはこの増分の合計＋基礎なので、全員の合計が大きくなる割り当てが最高です。${anyCum?'「うち累積」は、PERFECT の回数で積み上がるスコアUPのスナップ（ゴースト・アイズなど）の分です。スキル発動から5秒間、曲の平均のノーツ密度で全部 PERFECT として見積もっています（haneoka のエンジンは未対応なのでアプリ独自の見積もり）。':''}</p></details>`}
 // 最高スコアになる発動順（メンバーごとに何番目に発動するか。編成表の列に出す）
 function bestOrderPos(e){if(!e.ord)return null;const p=e.ord[e.ord.length-1].p,pos=[];p.forEach((i,k)=>pos[i]=k+1);return pos}
 // 数値ブロック
