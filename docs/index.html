@@ -533,7 +533,26 @@ function prep(song,ch,gkMode,bandOnly){
   // 撃奏: 区間の種類ごとの数（3区間）
   const gkCnt={COMBO:0,JUST:0,LUCK:0};if(gk)for(const t of song.gkTypes||[])gkCnt[t]=(gkCnt[t]||0)+1;
   CTX={gk,gkCnt,gkQ:(st.gkQ??162)/100,gkEff:st.gkEff||{COMBO:17,JUST:17,LUCK:11},gkBase:st.gkBase||{COMBO:0,JUST:32,LUCK:0},TL,VIP,SE:st.skillEff??0.5,K:song.K||1,T:Math.max(1,song.len||120),song,ch:!!ch,sb:song.sb,sw:song.sw,rt:song.rt?{b:song.rt.b}:null,AW,kf:song.kf||st.scoreAdj||1,dens:song.rt?.n&&song.len?song.rt.n/song.len:7};
+  if(PRUNE_SNAPS&&gk&&bandOnly)pruneSnaps();
 }
+// 出番のないスナップを探索から外す（アリーナ育成の計算だけ、PRUNE_SNAPS。2026-11-01）。
+// 撃奏アリーナの評価は、枠ごとの「総合力（pairPow）」と「スキルの伸び（延長・累積を含む y）」の足し算と、撃奏サポート・判定幅の上乗せで決まり、どれも大きいほど得。
+// 撃奏サポートの上乗せがこの曲で0で判定幅も持たないスナップ s について、どのメンバーと組んでも総合力・スキルの伸びが s 以上のスナップ（判定幅なし）が5枚以上あれば、
+// s を使う編成は必ずそのどれかに替えて同じか良くなるので、s を外しても最適な値は変わらない（同じ値どうしは並び順で片方だけを残す）
+let PRUNE_SNAPS=false;
+function pruneSnaps(){const real=S.filter(s=>!s.none),none=S.filter(s=>s.none);if(real.length<=6)return;
+  const yv=(m,s)=>{const ext=(s.band&&s.band===m.band)?(s.extB!=null&&s.extB!==''?+s.extB:s.ext*2):s.ext;return m.sk*(m.sec+ext)+cumAdd(m,s)*5};
+  const pp=real.map(s=>M.map(m=>pairPow(m,s))),yy=real.map(s=>M.map(m=>yv(m,s)));
+  // 撃奏サポートの上乗せがこの曲で実際に0か（アリーナは全区間が同じ種類なので、種類の違うサポートは効かない）。曲のデータの値を直接見る
+  const G=CTX.song.gk2,zero=x=>!x||(Array.isArray(x)?x.every(zero):!(Math.abs(+x)>0));
+  const noGk=s=>s.gs==null||M.every(m=>{const k=snapKey(G,s,m);return zero(G.v?.[k])&&zero(G.vg?.[k])});
+  const plain=s=>noGk(s)&&!s.gj&&!s.gkJudge&&!s.lock,okDom=d=>!d.gj&&!d.gkJudge;
+  const keep=real.filter((s,i)=>{if(!plain(s))return true;let n=0;
+    for(let j=0;j<real.length&&n<5;j++){if(j===i||!okDom(real[j]))continue;let ge=true,gt=false;
+      for(let k=0;k<M.length;k++){const dp=pp[j][k]-pp[i][k],dy=yy[j][k]-yy[i][k];if(dp<0||dy<-1e-12){ge=false;break}if(dp>0||dy>1e-12)gt=true}
+      if(ge&&(gt||j<i))n++}
+    return n<5});
+  if(keep.length<real.length){S=[...keep,...none];CTX.pruned=real.length-keep.length}}
 // 総合力はゲームの「総合力詳細」と同じ計算: メンバーごと・パラメータ（Pfm/Tec/Vis）ごとに各ボーナスを掛けて切り捨て、足し合わせる。
 // スナップ補正はスナップのパラメータ別%（チャレンジのスナップのイベントパラメータ%は足してから掛けて1回だけ切り捨て、2026-10-25 微笑みの爆弾で確認）、リーダースキルは対象パラメータだけ（同じパラメータへの%は合計してから切り捨て）。
 // 2026-10-25 実機の内訳（革命道中・祥子リーダー）と各項目0〜1の差で一致
@@ -830,12 +849,15 @@ function solve(song,obj,opt={}){
         const thr=cbThr,f0=f;f=e=>((e.cb||0)>=thr?2e15:(e.cb||0)*1e12)+f0(e)}
       // 比較表用の評価: スキル持ちの人数の条件だけ残す（判定幅スナップ・COMBO数・LUCK値の指定は外す）
       fCmp=e=>{const sh=Math.max(0,need-((k&&(e.mk||{})[k])||0));return e.score*(sh?0.5-0.05*sh:1)};
-      if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
+      // 勝ち条件の最大は opt.lkMax / opt.jsMax で渡せる（アリーナ育成: 勝ち条件に関係しない強化では前の値を使い回す）。
+      // 渡しても渡さなくても同じ結果になるよう、最大を求めたあとの本探索は同じ種からやり直す（2026-11-01）
+      if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=opt.lkMax??evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
         if(lr==='second'){const v2=evq(optimizeF(e=>e.lk<lkMax*0.99?e.lk:-1e18)).lk;if(v2>0&&v2<lkMax)lkThr=v2}
         const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}
       // JUST の区間の強さ（推定JUST率×(1＋JUST数獲得量の上乗せ)、e.js）を最高に必須（gkJustReq='max'。アリーナ育成の診断で使う、2026-11-01）
-      if(st.gkJustReq==='max'&&ty.has('JUST')){CTX.needJs=true;jsMax=evq(optimizeF(e=>e.js||0)).js||0;
-        const thr=jsMax*(1-1e-9),sc=1e14/Math.max(jsMax,1e-9),f2=f;f=e=>((e.js||0)>=thr?2e15:(e.js||0)*sc)+f2(e)}}
+      if(st.gkJustReq==='max'&&ty.has('JUST')){CTX.needJs=true;jsMax=opt.jsMax??(evq(optimizeF(e=>e.js||0)).js||0);
+        const thr=jsMax*(1-1e-9),sc=1e14/Math.max(jsMax,1e-9),f2=f;f=e=>((e.js||0)>=thr?2e15:(e.js||0)*sc)+f2(e)}
+      if((lr&&ty.has('LUCK'))||(st.gkJustReq==='max'&&ty.has('JUST')))seedRnd(SEED0)}
     const t=optimizeF(f);
     // LUCK値は指定なしでも表示する（LUCK 区間のある撃奏の曲）。手持ちの最高は探索のあとに求める（探索の乱数の順を変えない）
     if(isGk(obj)&&lkMax==null&&(song.gkTypes||[]).includes('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;CTX.needLk=false}
@@ -1820,14 +1842,14 @@ function arpRoster(scen,band,base){const R=JSON.parse(JSON.stringify(base));if(s
     else if(r&&r.own)R.s[c.id]={...r,lv:c.rk[(r.rk||1)-1][0]}}// 上限解放はダブりが要るので、今の上限解放でLvだけ最大
   return R}
 // 1曲・1種類・1つの手持ちで、勝ち条件を最高に必須にして最適化
-function arpSolve(song,band,kind,type,strong){const st=state.settings,keep={r:st.arenaRule,c:st.gkComboReq,l:st.gkLuckReq,j:st.gkJustReq},ch=state.ui.chSong;
+function arpSolve(song,band,kind,type,strong,mx){const st=state.settings,keep={r:st.arenaRule,c:st.gkComboReq,l:st.gkLuckReq,j:st.gkJustReq},ch=state.ui.chSong;
   const g=arenaReg(band);st.arenaRule={...(keep.r||{}),[band]:{...(g?{at:g[0]}:{}),gk:kind,type}};
   st.gkComboReq=kind==='COMBO'?'max':'';st.gkLuckReq=kind==='LUCK'?'max':'';st.gkJustReq=kind==='JUST'?'max':'';state.ui.chSong='none';
-  try{seedRnd(12345);const r=strong?solve(song,'arena'):withFast(()=>solve(song,'arena'));if(!r||r.error||!r.best)return null;const e=r.best.e;
+  PRUNE_SNAPS=true;try{seedRnd(12345);const o=mx!=null?(kind==='LUCK'?{lkMax:mx}:kind==='JUST'?{jsMax:mx}:{}):{},r=strong?solve(song,'arena',o):withFast(()=>solve(song,'arena',o));if(!r||r.error||!r.best)return null;const e=r.best.e;
     const met=kind==='COMBO'?e.cb:kind==='LUCK'?(r.lkMax??e.lk):(r.jsMax??e.js);
-    return{met:met||0,score:e.score,sec:e.sec,team:r.best.t.m.map(i=>M[i]?.cid),snaps:r.best.t.s.map(i=>S[i]&&!S[i].none?S[i].cid:null)}}
+    return{mx:kind==='LUCK'?r.lkMax:kind==='JUST'?r.jsMax:null,met:met||0,score:e.score,sec:e.sec,team:r.best.t.m.map(i=>M[i]?.cid),snaps:r.best.t.s.map(i=>S[i]&&!S[i].none?S[i].cid:null)}}
   catch(err){return null}
-  finally{if(keep.r===undefined)delete st.arenaRule;else st.arenaRule=keep.r;st.gkComboReq=keep.c;st.gkLuckReq=keep.l;if(keep.j===undefined)delete st.gkJustReq;else st.gkJustReq=keep.j;state.ui.chSong=ch}}
+  finally{PRUNE_SNAPS=false;if(keep.r===undefined)delete st.arenaRule;else st.arenaRule=keep.r;st.gkComboReq=keep.c;st.gkLuckReq=keep.l;if(keep.j===undefined)delete st.gkJustReq;else st.gkJustReq=keep.j;state.ui.chSong=ch}}
 const arenaSongsOf=b=>state.songs.filter(s=>s.band===b&&arenaSong(s)&&MY_DATA.arena?.gk?.[s.name]);
 function startArenaDiag(){const id=++toolRun,bands=arpBands();if(!bands.length){arpOut={err:'バンドを1つ以上選んでください。'};render();return}
   const jobs=[];for(const b of bands){const songs=arenaSongsOf(b);for(const kind of ARP_KINDS)for(const scen of ['now','own','league'])for(const s of songs)jobs.push({b,kind,scen,s})}
@@ -1912,20 +1934,24 @@ function arpUps(band,R,snaps){const out=[],add=(k,cid,cat,up,f,max)=>out.push({k
     const gl=r.gl||1;if(c.geki&&gl<5){add('m',cid,'gl',`撃奏Lv ${gl}→${gl+1}`,x=>{x.gl=gl+1});if(gl<4)add('m',cid,'gl',`撃奏Lv ${gl}→5`,x=>{x.gl=5},1)}}
   for(const sid of snaps){const c=CSN[sid],r=R.s[sid];if(!c||!r?.own)continue;const cap=c.rk[(r.rk||1)-1][0];if(r.lv<cap)add('s',sid,'tr',`Lv ${r.lv}→${cap}`,x=>{x.lv=cap})}
   return out}
+// 強化の前後でモデルに入る数値が同じか（同じなら計算しなくても結果は前と同じ。高速化B、2026-11-01）
+// メンバー: 能力値・覚醒（リーダースキル・タイプ一致）・スキル%・撃奏Lv（スキルの効き・上乗せ）、スナップ: 能力値（補正%）
+function arpModelSig(k,cid,r){if(k==='m'){const c=CM[cid],gl=r.gl||1;return JSON.stringify([mStats(c,r),r.rk,c.live[r.sl-1],c.geki?gl:0])}
+  const c=CSN[cid];return JSON.stringify([sStats(c,r),r.rk])}
 // バンドの評価（その時点の state.roster で）: 曲ごとの勝ち条件・区間スコア・推定スコアの平均と、編成に入ったスナップ
 // 育成プランで強化を選ぶときの曲（速さのため）: そのバンドのアリーナ曲を長さ順に並べ、最短・最長を含めて等間隔に5曲。最後の確認は全曲
 function arpPlanSongs(band,n=5){const L=arenaSongsOf(band).sort((a,b)=>(a.len||0)-(b.len||0)||(a.name>b.name?1:-1));if(L.length<=n)return L;
   const out=[];for(let i=0;i<n;i++)out.push(L[Math.round(i*(L.length-1)/(n-1))]);return[...new Set(out)]}
-function arpEval(band,kind,type,strong,few){const songs=few?arpPlanSongs(band):arenaSongsOf(band);let n=0,met=0,sec=0,score=0;const snaps=new Set(),mem=new Set();
-  for(const s of songs){const r=arpSolve(s,band,kind,type,strong);if(!r)continue;n++;met+=r.met;sec+=r.sec||0;score+=r.score;for(const x of r.snaps)if(x!=null)snaps.add(x);for(const x of r.team)if(x!=null)mem.add(x)}
-  return n?{met:met/n,sec:sec/n,score:score/n,snaps:[...snaps],mem:[...mem]}:null}
+function arpEval(band,kind,type,strong,few,mxs){const songs=few?arpPlanSongs(band):arenaSongsOf(band);let n=0,met=0,sec=0,score=0;const snaps=new Set(),mem=new Set(),mx={};
+  for(const s of songs){const r=arpSolve(s,band,kind,type,strong,mxs?.[s.name]);if(r)mx[s.name]=r.mx;if(!r)continue;n++;met+=r.met;sec+=r.sec||0;score+=r.score;for(const x of r.snaps)if(x!=null)snaps.add(x);for(const x of r.team)if(x!=null)mem.add(x)}
+  return n?{met:met/n,sec:sec/n,score:score/n,snaps:[...snaps],mem:[...mem],mx}:null}
 // 1件の計算（Worker でも使う）: j={band,kind,type,scen:'base'|'own'|'cand',key,strong}。state.roster はその時点の手持ち
 function arpJob(j){const keep=state.roster,base=j.R||keep;
   try{if(j.R){state.roster=j.R;materialize()}
     if(j.scen==='own'){state.roster=arpRoster('own',j.band,base);materialize()}
     else if(j.scen==='add'){const R=JSON.parse(JSON.stringify(base)),[k,cid]=j.add,c=(k==='m'?CM:CSN)[cid];R[k][cid]=gachaRoster(k,c,'max');state.roster=R;materialize()}
     else if(j.scen==='cand'){const R=JSON.parse(JSON.stringify(base)),u=arpUps(j.band,R,j.snaps||[]).find(x=>x.key===j.key);if(!u)return null;u.f(R[u.k][u.cid]);state.roster=R;materialize()}
-    return arpEval(j.band,j.kind,j.type,j.strong,j.few)}
+    return arpEval(j.band,j.kind,j.type,j.strong,j.few,j.mxs)}
   finally{state.roster=keep;materialize()}}
 // 並列（Worker）か1本で、jobs をすべて計算する。R=その時点の手持ち
 async function arpRun(id,R,jobs,onEach){const out=new Array(jobs.length);
@@ -1948,9 +1974,11 @@ async function startArenaPlan(){const id=++toolRun,bands=arpBands();
     for(let round=1;round<=40;round++){
       const ups=arpUps(b,R,E.snaps).map(u=>{const to=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(to);const cost=growCost(u.k,u.cid,R[u.k][u.cid],to),use=sealUse(u.k,u.cid,cost,I);return{...u,cost,use,val:sealValue(u.k,u.cid,cost,I)}})
         .filter(u=>!u.use.short.length&&u.use.seal<=(+I.it[SEAL]||0)&&(P.later||!u.use.months));
+      // 高速化B: モデルに入る数値が変わらない候補は伸び0なので計算しない
+      {const n0=ups.length;for(let i=ups.length-1;i>=0;i--){const u=ups[i],to=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(to);if(arpModelSig(u.k,u.cid,R[u.k][u.cid])===arpModelSig(u.k,u.cid,to))ups.splice(i,1)}P.skipped=(P.skipped||0)+n0-ups.length}
       if(!ups.length)break;P.round=round;
       P.msg=`${b}：${round}つ目の強化を選んでいます（候補${ups.length}件 × 長さ別のアリーナ曲${arpPlanSongs(b).length}曲）`;P.done=0;P.total=ups.length;paintPlan();
-      const res=await arpRun(id,R,ups.map(u=>({band:b,kind,type,scen:'cand',key:u.key,snaps:E.snaps,few:1})),tick);if(id!==toolRun)return;
+      const res=await arpRun(id,R,ups.map(u=>({band:b,kind,type,scen:'cand',key:u.key,snaps:E.snaps,few:1,mxs:kind!=='COMBO'&&u.cat!=='gl'?E.mx:null})),tick);if(id!==toolRun)return;
       const need=E.met<P.target[b]-eps(P.target[b]);let pick=null,best=-Infinity;
       ups.forEach((u,i)=>{const e=res[i];if(!e)return;
         if(need){if(e.met>E.met+eps(E.met)){const sc=-u.val+(e.met-E.met)*1e-6;if(sc>best){best=sc;pick={u,e}}}}
