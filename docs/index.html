@@ -188,6 +188,15 @@ nav.tabs .subtabs button[aria-selected="true"]{background:var(--accent);border-c
 .combo-opt i.cb.b-0{color:#4f8fd6}.combo-opt i.cb.b-1{color:#b06ad0}.combo-opt i.cb.b-2{color:#e0789a}.combo-opt i.cb.b-3{color:#3fa98a}.combo-opt i.cb.b-4{color:#d99a3a}
 .songband{color:var(--ink)}
 label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+/* アリーナ作戦（2026-11-01） */
+.today{white-space:nowrap}.today.hit{color:var(--accent);font-weight:700}
+.daychips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.daychip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px}.daychip.off{opacity:.45}
+@media (max-width:640px){table.mcard thead{display:none}table.mcard,table.mcard tbody,table.mcard tr,table.mcard td{display:block;width:100%}
+  table.mcard tr{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px}
+  table.mcard td{display:flex;gap:12px;justify-content:space-between;align-items:baseline;text-align:right;border:0;padding:3px 0}
+  table.mcard td::before{content:attr(data-l);color:var(--muted);text-align:left;flex:none;max-width:45%;font-size:12px}
+  table.mcard td[data-l=""]::before{display:none}}
 </style>
 
 <header class="top">
@@ -1841,7 +1850,7 @@ function arpFinish(){for(const b of arpOut.bands)for(const kind of ARP_KINDS){co
   // リーグの上限の編成に入る、持っていないカード（メンバーと判定幅スナップ）
   const miss=new Set();for(const x of X.league||[]){for(const cid of x.team)if(!state.roster.m[cid]?.own)miss.add('m'+cid);if(kind==='JUST')for(const sid of x.snaps)if(sid!=null&&!state.roster.s[sid]?.own&&CSN[sid]?.gj)miss.add('s'+sid)}
   X.miss=[...miss]}}
-function paintArena(){const el=document.getElementById('arpRes');if(el)el.innerHTML=arpResHtml();const b=document.querySelector('[data-act="arenaDiag"]');if(b)b.disabled=!!(arpOut&&arpOut.phase==='run')}
+function paintArena(){const el=document.getElementById('arpRes');if(el)el.innerHTML=mcard(arpResHtml());const b=document.querySelector('[data-act="arenaDiag"]');if(b)b.disabled=!!(arpOut&&arpOut.phase==='run')}
 function arpResHtml(){const O=arpOut;if(!O)return'';if(O.err)return`<div class="panel muted">${esc(O.err)}</div>`;
   if(O.phase==='run')return`<section class="panel"><p class="muted">計算中… ${O.done} / ${O.total}（バンド×3種類×3つの手持ち×アリーナ曲）<button class="btn small" data-act="arenaStop">止める</button></p></section>`;
   const stale=O.sig!==arpSig()?'<p class="note warn">入力が変わったので計算し直してください（下は前回の結果）。</p>':'';
@@ -1868,14 +1877,18 @@ function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOu
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">アリーナ作戦</h2>
     <p class="note">撃奏アリーナで、バンドごとに選んだ撃奏の種類で勝つための作戦を立てます。区間の順位は COMBO数・JUST数・LUCKポイントで決まり、同じ数なら区間スコアで決まります。アリーナはバンド別のリーグなので、相手も同じバンドのメンバーだけを使います（スナップは制限なし）。</p>
     ${se?`<p class="note">シーズン：<b>${esc(se[2])}</b>（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
+    ${arpTodayHtml()}${arpTermsHtml()}
     <div class="tbl"><table><thead><tr><th>バンド</th><th>撃奏の種類</th><th>タイプ</th><th>優先度</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
     <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button><button class="btn primary" data-act="arenaPlan"${arpPlan&&arpPlan.phase==='run'?' disabled':''}>② 育成プランを計算</button></div>
     <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます。選ぶたびに候補すべて × アリーナ曲すべてを計算し直すので、数分かかることがあります（進み具合と「止める」ボタンが出ます）。</p></section>
-  <div id="arpRes">${arpResHtml()}</div><div id="arpPlan">${arpPlanHtml()}</div></div>`}
+  <div id="arpRes">${mcard(arpResHtml())}</div><div id="arpPlan">${mcard(arpPlanHtml())}</div>${arpDaysHtml()}
+  <section class="panel stack"><h3 style="margin:0">④ 持っていないカード（参考）</h3>
+    <p class="note">持っていないカードを1枚ずつ、フル育成（特訓・覚醒・スキルLv・撃奏Lv・上限解放をすべて最大）で持っていると仮定して、選んだ種類の最適編成に入るものと伸びを出します。ガチャが要るので計画には入れません。候補はそのバンドの持っていないメンバーと、選んだ種類の撃奏サポートを持つスナップ（JUSTは判定幅スナップも）です。</p>
+    <div class="row"><button class="btn small" data-act="arenaMiss"${arpMiss&&arpMiss.phase==='run'?' disabled':''}>④ を計算</button></div><div id="arpMiss">${mcard(arpMissHtml())}</div></section></div>`}
 function arpInput(el){if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
   c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
-function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
+function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaMiss'){startArenaMiss();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
 // ===== ② 育成プラン（段階3） =====
 // 優先度の高いバンドから、手持ちの素材（交換してでも）で1つずつ強化を選ぶ。選ぶたびに残りの候補をすべて計算し直す。
 //   1段目（必須）: 勝ち条件の値を「持っているカードを育てきったときの最大」に届くまで上げる強化を、値段の安い順に
@@ -1892,13 +1905,14 @@ function arpUps(band,R,snaps){const out=[],add=(k,cid,cat,up,f,max)=>out.push({k
   for(const sid of snaps){const c=CSN[sid],r=R.s[sid];if(!c||!r?.own)continue;const cap=c.rk[(r.rk||1)-1][0];if(r.lv<cap)add('s',sid,'tr',`Lv ${r.lv}→${cap}`,x=>{x.lv=cap})}
   return out}
 // バンドの評価（その時点の state.roster で）: 曲ごとの勝ち条件・区間スコア・推定スコアの平均と、編成に入ったスナップ
-function arpEval(band,kind,type,strong){const songs=arenaSongsOf(band);let n=0,met=0,sec=0,score=0;const snaps=new Set();
-  for(const s of songs){const r=arpSolve(s,band,kind,type,strong);if(!r)continue;n++;met+=r.met;sec+=r.sec||0;score+=r.score;for(const x of r.snaps)if(x!=null)snaps.add(x)}
-  return n?{met:met/n,sec:sec/n,score:score/n,snaps:[...snaps]}:null}
+function arpEval(band,kind,type,strong){const songs=arenaSongsOf(band);let n=0,met=0,sec=0,score=0;const snaps=new Set(),mem=new Set();
+  for(const s of songs){const r=arpSolve(s,band,kind,type,strong);if(!r)continue;n++;met+=r.met;sec+=r.sec||0;score+=r.score;for(const x of r.snaps)if(x!=null)snaps.add(x);for(const x of r.team)if(x!=null)mem.add(x)}
+  return n?{met:met/n,sec:sec/n,score:score/n,snaps:[...snaps],mem:[...mem]}:null}
 // 1件の計算（Worker でも使う）: j={band,kind,type,scen:'base'|'own'|'cand',key,strong}。state.roster はその時点の手持ち
 function arpJob(j){const keep=state.roster,base=j.R||keep;
   try{if(j.R){state.roster=j.R;materialize()}
     if(j.scen==='own'){state.roster=arpRoster('own',j.band,base);materialize()}
+    else if(j.scen==='add'){const R=JSON.parse(JSON.stringify(base)),[k,cid]=j.add,c=(k==='m'?CM:CSN)[cid];R[k][cid]=gachaRoster(k,c,'max');state.roster=R;materialize()}
     else if(j.scen==='cand'){const R=JSON.parse(JSON.stringify(base)),u=arpUps(j.band,R,j.snaps||[]).find(x=>x.key===j.key);if(!u)return null;u.f(R[u.k][u.cid]);state.roster=R;materialize()}
     return arpEval(j.band,j.kind,j.type,j.strong)}
   finally{state.roster=keep;materialize()}}
@@ -1945,7 +1959,7 @@ async function startArenaPlan(){const id=++toolRun,bands=arpBands();
     P.I=I;P.phase='done'}
   catch(err){P.phase='done';P.err2=String(err&&err.message||err)}
   paintPlan()}
-function paintPlan(){const el=document.getElementById('arpPlan');if(el)el.innerHTML=arpPlanHtml();const b=document.querySelector('[data-act="arenaPlan"]');if(b)b.disabled=!!(arpPlan&&arpPlan.phase==='run')}
+function paintPlan(){const el=document.getElementById('arpPlan');if(el)el.innerHTML=mcard(arpPlanHtml());const b=document.querySelector('[data-act="arenaPlan"]');if(b)b.disabled=!!(arpPlan&&arpPlan.phase==='run')}
 // 交換リスト（計画全体）: アイテムごとの回数と、今月の残り回数で今月にできる分／翌月以降
 function arpExchanges(P){const m=new Map();for(const s of P.steps)for(const [id,n] of s.use.ex)m.set(id,(m.get(id)||0)+n);
   return[...m].map(([id,n])=>{const s=SHOP[id],lim=s[2],left=lim?+(P.I0.left[id]??lim):Infinity,now=Math.min(n,left);return{id,n,qty:n*s[0],seal:n*s[1],now,later:n-now,months:lim&&n>now?Math.ceil((n-now)/lim):0}})}
@@ -1990,6 +2004,53 @@ function arpPlanAct(a,el){const P=arpPlan;
   if(a==='arpCopy'){const t=arpPlanText(),ok=()=>{const m=document.getElementById('arpCopyMsg');if(m)m.textContent='コピーしました。'};
     if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).then(ok,()=>prompt('コピーしてください',t));else prompt('コピーしてください',t);return 'done'}
   return false}
+// ===== 段階4: ③ プレイする日・④ 持っていないカード・今日の表示・スマホのカード型・用語の説明 =====
+const WD='日月火水木金土';
+const jstDate=t=>{const d=new Date(t*1000+9*3600e3);return{md:`${d.getUTCMonth()+1}/${d.getUTCDate()}`,wd:WD[d.getUTCDay()],key:d.toISOString().slice(0,10)}};
+const TYPE_ALL=t=>t==='all'?'ALL':t;
+// 今日のルール（選んだバンド。1つも選んでいなければ全バンド）。選んだ種類の日なら目立たせる
+function arpTodayHtml(){const t=arenaClock(),bs=arpBands().length?arpBands():BAND_NAMES,d=jstDate((t-4*3600e3)/1000);
+  const L=bs.map(b=>{const g=arenaReg(b);if(!g)return null;const c=arpCfg(b),hit=c.on&&g[3]===c.kind;
+    return`<span class="${hit?'today hit':'today'}">${esc(b)} <b>${g[3]}</b>（${esc(TYPE_ALL(g[2]))}）${hit?' ★選んだ種類の日':''}</span>`}).filter(Boolean);
+  return L.length?`<p class="note">今日（${d.md}・${d.wd}、毎日4:00切替）は ${L.join('　')}</p>`:''}
+// ③ 選んだ種類の日（今日〜シーズンの終わり、マスターのルール表から）。同じ日に2つの区切りがあれば1日にまとめる
+function arpDays(b,kind){const L=MY_DATA.arena?.reg?.[b]||[],now=arenaClock()/1000,se=arenaSeason(),end=se?jstTs(se[1])/1000:Infinity,seen=new Map();
+  for(const [s,e,ty,gk] of L){if(gk!==kind||e<now||s>end)continue;const d=jstDate(Math.max(s,now)-4*3600);if(!seen.has(d.key))seen.set(d.key,{...d,types:new Set()});seen.get(d.key).types.add(ty)}
+  return[...seen.values()]}
+function arpDaysHtml(){const bs=arpBands();if(!bs.length)return'';const se=arenaSeason();
+  return`<section class="panel stack"><h3 style="margin:0">③ プレイする日</h3>
+    ${se?`<p class="note">シーズン：${esc(se[2])}（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）。マスターに載っているルールの分だけ並べます。</p>`:''}
+    ${bs.map(b=>{const c=arpCfg(b),D=arpDays(b,c.kind);return`<div><b>${esc(b)} ${c.kind}</b>：${D.length?`この計画が効く日はあと <b>${D.length}日</b><div class="daychips">${D.map(d=>{const ok=c.type==='all'||d.types.has(c.type)||d.types.has('all');return`<span class="daychip${ok?'':' off'}" title="${ok?'':'計算に使ったタイプと違う日'}">${d.md}(${d.wd}) ${[...d.types].map(TYPE_ALL).join('・')}</span>`}).join('')}</div>`:'<span class="muted">シーズンの残りに、この種類の日はありません（またはルールがまだマスターに無い）。</span>'}</div>`}).join('')}
+    <p class="note">タイプを ALL 以外にしたときは、計算に使ったタイプと違う日を薄く表示します。</p></section>`}
+// ④ 持っていないカード（参考）: フル育成で持っていると仮定して、選んだ種類の最適編成（勝ち条件を最高に必須）に入るか・どれだけ伸びるか
+let arpMiss=null;
+function arpMissCands(b,kind){const out=[];
+  for(const c of CAT.members)if(c.band===b&&!state.roster.m[c.id]?.own)out.push(['m',c.id]);
+  for(const c of CAT.snaps)if(!state.roster.s[c.id]?.own&&(c.gkType===kind||(kind==='JUST'&&c.gj)))out.push(['s',c.id]);
+  return out}
+async function startArenaMiss(){const id=++toolRun,bands=arpBands();if(!bands.length){arpMiss={err:'バンドを1つ以上選んでください。'};render();return}
+  const jobs=[],meta=[];for(const b of bands){const c=arpCfg(b),base={band:b,kind:c.kind,type:c.type};jobs.push({...base,scen:'base'});meta.push([b,null]);
+    for(const [k,cid] of arpMissCands(b,c.kind)){jobs.push({...base,scen:'add',add:[k,cid]});meta.push([b,[k,cid]])}}
+  arpMiss={phase:'run',done:0,total:jobs.length,bands,rows:{}};paintMiss();
+  const res=await arpRun(id,state.roster,jobs,()=>{arpMiss.done++;paintMiss()});if(id!==toolRun)return;
+  const base={};meta.forEach(([b,x],i)=>{if(!x)base[b]=res[i]});
+  meta.forEach(([b,x],i)=>{if(!x)return;const e=res[i],B=base[b];if(!e||!B)return;const [k,cid]=x,used=k==='m'?e.mem.includes(cid):e.snaps.includes(cid);
+    if(used)(arpMiss.rows[b]??=[]).push({k,cid,met0:B.met,met:e.met,sec:e.sec/B.sec-1,score:e.score/B.score-1})});
+  for(const b in arpMiss.rows)arpMiss.rows[b].sort((x,y)=>y.met-x.met||y.sec-x.sec);
+  arpMiss.phase='done';paintMiss()}
+function paintMiss(){const el=document.getElementById('arpMiss');if(el)el.innerHTML=mcard(arpMissHtml());const b=document.querySelector('[data-act="arenaMiss"]');if(b)b.disabled=!!(arpMiss&&arpMiss.phase==='run')}
+function arpMissHtml(){const O=arpMiss;if(!O)return'';if(O.err)return`<p class="muted">${esc(O.err)}</p>`;if(O.phase==='run')return`<p class="muted">計算中… ${O.done} / ${O.total}</p>`;
+  return O.bands.map(b=>{const c=arpCfg(b),L=O.rows[b]||[];return`<div><b>${esc(b)} ${c.kind}</b>：${L.length?`<div class="tbl"><table><thead><tr><th>カード</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th></tr></thead><tbody>
+    ${L.map(x=>{const cc=(x.k==='m'?CM:CSN)[x.cid];return`<tr><td>${esc(x.k==='m'?`${cc.chara}${cc.rarity}「${cc.title}」`:`スナップ${cc.rarity}「${cc.title}」`)}</td><td class="num">${arpMet(c.kind,x.met0)} → ${arpMet(c.kind,x.met)}</td><td class="num">${pct(x.sec)}</td><td class="num">${pct(x.score)}</td></tr>`}).join('')}</tbody></table></div>`:'<span class="muted">持っていないカードで編成に入るものはありません。</span>'}</div>`}).join('')}
+// 用語の「？」（マウスでは吹き出し、タッチでは押すと下に説明が開く）
+function qh(id,label,text){return`<span class="helpwrap"><button type="button" class="help" data-help="${id}" aria-expanded="false" aria-label="${esc(label)}の説明">?</button><span class="tip" role="tooltip">${text}</span></span>`}
+const ARP_TERMS=[['arpT1','勝ち条件','区間の順位を決める値。COMBO＝撃奏COMBO数（1回ごとに 1＋上乗せ合計 回分）、JUST＝JUST数（推定JUST率×(1＋上乗せ合計)で見る）、LUCK＝LUCKポイント（アプリでは LUCK値で代わりに見る）。同じ値なら区間スコアで決まります。'],
+  ['arpT2','区間スコア','撃奏区間だけのスコア（順位ボーナス抜き）。勝ち条件の値が同じ相手とは、これで順位が決まります。'],
+  ['arpT3','上乗せ','撃奏スキルの「撃奏COMBO獲得量+N」「JUST数獲得量+N」の合計。撃奏Lv1〜4のスキルは区間の最初の2〜5秒しか効かないものが多いので、効く秒数の割合で数えます（Lv5で区間ずっと）。']];
+const arpTermsHtml=()=>`<p class="note">用語：${ARP_TERMS.map(([id,l,t])=>`${l} ${qh(id,l,t)}`).join('　')}</p>${ARP_TERMS.map(([id,l,t])=>`<p class="helpbox note" id="${id}" hidden><b>${l}</b>：${t}</p>`).join('')}`;
+// スマホでは表をカード型にする: 見出しの文字を各セルの data-l に入れる（CSS の table.mcard）
+function mcard(html){return html.replace(/<table>([\s\S]*?)<\/table>/g,(all,inner)=>{const ths=[...inner.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map(m=>m[1].replace(/<br>/g,'／').replace(/<[^>]+>/g,'').trim());
+  return'<table class="mcard">'+inner.replace(/<tr([^>]*)>([\s\S]*?)<\/tr>/g,(row,attr,cells)=>{if(cells.includes('<th'))return row;let i=0;return`<tr${attr}>`+cells.replace(/<td(?=[\s>])/g,()=>`<td data-l="${esc(ths[i++]||'')}"`)+'</tr>'})+'</table>'})}
 // JSON取り込み: 全体のバックアップ（songs と roster を含む）なら置き換え、それ以外は書いてある項目だけ上書き
 function importData(o){
   if(!o||typeof o!=='object')throw 0;
