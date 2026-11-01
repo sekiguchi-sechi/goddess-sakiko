@@ -189,7 +189,7 @@ nav.tabs .subtabs button[aria-selected="true"]{background:var(--accent);border-c
 .songband{color:var(--ink)}
 label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
-/* アリーナ作戦（2026-11-01） */
+/* アリーナ育成（2026-11-01） */
 .today{white-space:nowrap}.today.hit{color:var(--accent);font-weight:700}
 .daychips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.daychip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px}.daychip.off{opacity:.45}
 @media (max-width:640px){table.mcard thead{display:none}table.mcard,table.mcard tbody,table.mcard tr,table.mcard td{display:block;width:100%}
@@ -394,6 +394,8 @@ if(state.settings&&state.settings.ver<18){Object.assign(state.settings,{gkQ:150,
   // 埋め込みの曲データが新しくなっていれば、同名曲の閾値・係数などを上書きする（idは保つ）
   if(typeof MY_DATA!=='undefined'&&(state.songVer||0)<(MY_DATA.songVer||0)){const by=Object.fromEntries(MY_DATA.songs.map(x=>[x.name,x]));for(const x of state.songs){const d=by[x.name];if(d)Object.assign(x,d)}state.songVer=MY_DATA.songVer}
   state.ui=Object.assign({tab:'opt',song:state.songs[0]?.id,obj:'ptTotal'},state.ui||{});
+  // 2026-11-01 育成の優先度タブを廃止（アリーナ育成へ）
+  if(state.ui.tab==='growth')state.ui.tab='arena';if(state.ui.sub?.growth==='growth')state.ui.sub.growth='arena';
   materialize();
   if(!OBJECTIVES.some(o=>o.id===state.ui.obj))state.ui.obj=({item:'itemTotal',chitem:'itemTotal',score:'maxscore'})[state.ui.obj]||'ptTotal';
   if(state.ui.cmpObj&&!OBJECTIVES.some(o=>o.id===state.ui.cmpObj))state.ui.cmpObj=state.ui.cmpObj==='score'?'maxscore':'ptTotal';
@@ -831,7 +833,7 @@ function solve(song,obj,opt={}){
       if(lr&&ty.has('LUCK')){CTX.needLk=true;lkMax=evq(optimizeF(e=>e.lk)).lk;lkThr=lkMax;
         if(lr==='second'){const v2=evq(optimizeF(e=>e.lk<lkMax*0.99?e.lk:-1e18)).lk;if(v2>0&&v2<lkMax)lkThr=v2}
         const thr=lkThr*(1-1e-9),sc=1e14/Math.max(lkMax,1),f1=f;f=e=>(e.lk>=thr?2e15:e.lk*sc)+f1(e)}
-      // JUST の区間の強さ（推定JUST率×(1＋JUST数獲得量の上乗せ)、e.js）を最高に必須（gkJustReq='max'。アリーナ作戦の診断で使う、2026-11-01）
+      // JUST の区間の強さ（推定JUST率×(1＋JUST数獲得量の上乗せ)、e.js）を最高に必須（gkJustReq='max'。アリーナ育成の診断で使う、2026-11-01）
       if(st.gkJustReq==='max'&&ty.has('JUST')){CTX.needJs=true;jsMax=evq(optimizeF(e=>e.js||0)).js||0;
         const thr=jsMax*(1-1e-9),sc=1e14/Math.max(jsMax,1e-9),f2=f;f=e=>((e.js||0)>=thr?2e15:(e.js||0)*sc)+f2(e)}}
     const t=optimizeF(f);
@@ -901,7 +903,7 @@ function solve(song,obj,opt={}){
 // タブは「グループ＋サブタブ」の2段（2026-10-30）。state.ui.tab はサブタブ（葉）の id のまま
 
 const TAB_GROUPS=[['opt','最適化',[['opt','今の手持ち'],['ideal','理想（育てたら）']]],['compare','全曲比較',[['compare','比較'],['songs','曲一覧']]],
-  ['growth','育成・ガチャ',[['growth','育成の優先度'],['gacha','ガチャ判断'],['arena','アリーナ作戦']]],
+  ['growth','育成・ガチャ',[['arena','アリーナ育成'],['gacha','ガチャ判断']]],
   ['roster','手持ちデータ',[['members','メンバー'],['snaps','スナップ'],['inv','持ちもの'],['settings','プレイヤー情報'],...(PUBLIC?[]:[['event','イベント']])]]];
 const TABS=TAB_GROUPS.flatMap(g=>g[2]);
 const tabGroup=id=>TAB_GROUPS.find(g=>g[2].some(x=>x[0]===id))||TAB_GROUPS[0];
@@ -1129,7 +1131,7 @@ function renderResult(){
   </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
-// ===== 追加ツール: 全曲比較タブ（周回効率）。育成の優先度は 66-growth.js（育成タブ） =====
+// ===== 追加ツール: 全曲比較タブ（周回効率）。育成の計算は 66-growth.js（ガチャ判断が使う） =====
 // どちらも「今の目的・手持ち・イベント」で最適化を何度も回す。画面が固まらないよう1件ずつ setTimeout で進める。
 // 全曲比較は最適化タブと同じ探索（同じ種）、育成の優先度は候補が多いので軽め（試行回数を減らす）。別のツールや最適化を始めたら古い実行は止まる（toolRun の世代で判定）
 let toolRun=0,cmpOut=null;
@@ -1192,7 +1194,7 @@ const cmpErr=(s,msg)=>({id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.le
 // 1曲を最適化して比較の1行にする
 function cmpRow(s,obj){let r;const keepCh=state.ui.chSong;try{if(obj==='chscore')state.ui.chSong=s.id;seedRnd(12345);r=solve(s,obj)}catch(e){r={error:String(e)}}finally{state.ui.chSong=keepCh}
   const b=r.best;return b?{id:s.id,name:s.name,band:s.band||'',type:s.type,len:s.len||120,rank:b.rank,score:b.e.score,val:b.val,pm:b.val/(((s.len||120)+PLAY_OVERHEAD)/60)}:cmpErr(s,r.error)}
-// ===== 育成タブ（2026-10-30）: 遊ぶもの全体で「どのカードをどう育てると伸びるか」を並べる =====
+// ===== 育成の計算（2026-10-30。育成の優先度タブは 2026-11-01 に廃止し、ガチャ判断がこの計算を使う）: 遊ぶもの全体で「どのカードをどう育てると伸びるか」を並べる =====
 // 評価する目的（growTargets）: イベントpt（最適化タブの曲＋チャレンジ曲）、アリーナ（バンドごとの代表曲 × COMBO/LUCK/JUST）、撃奏ライブ（最適化タブの曲）。
 // 候補は「次の1段」と「最大まで」の両方。素材の種類（特訓・Lv／スキルLv／撃奏Lv／覚醒／上限解放）で絞り込める。
 // 伸び＝育てた仮の手持ちで最適化し直した値 ÷ 元の値 − 1。カードが関係しない目的（他バンドのアリーナなど）は計算せず0。
@@ -1305,12 +1307,6 @@ function growHtml(){const G=growOut;if(!G||(G.mode||'grow')!==(state.ui.tab==='g
     ${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.r.card)}${x.r.chara?`<span class="muted">（${esc(x.r.chara)}）</span>`:''}</td><td>${esc(x.r.up)}${x.r.max?' <span class="pill">最大まで</span>':''}</td><td class="num"><b>${pct(x.tot)}</b></td>${grps.map(g=>`<td class="num">${pct(x.avg[g])}${g==='ar'&&x.top?` <span class="muted">／${esc(x.top.t.band)} ${x.top.t.kind} ${pct(x.top.v)}</span>`:''}</td>`).join('')}${costCells(x.r)}</tr>`).join('')}
     </tbody></table></div>`:(busy?'':'<p class="muted">育てて伸びる候補は見つかりませんでした。</p>')}</section>`}
 function paintGrow(){const el=document.getElementById('grow');if(el)el.innerHTML=growHtml();const b=document.querySelector('[data-act="grow"],[data-act="gacha"]');if(b)b.disabled=!!(growOut&&!growOut.err&&growOut.phase!=='done')}
-function viewGrowth(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&&growOut.phase!=='done';
-  const sel=g=>`<label class="f">${GROW_GRP[g]}<select id="gw-${g}">${opts([[2,'重視'],[1,'普通'],[0,'使わない']],w[g])}</select></label>`;
-  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">育成</h2>
-    <p class="note">遊ぶもの全体で、どのカードをどう育てると伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りを計算します。並列で計算するので、多くは数秒〜十数秒で終わります。</p>
-    <div class="row">${['ev','ar','gk'].map(sel).join('')}<button class="btn primary" data-act="grow"${busy?' disabled':''}>育成の優先度を計算</button></div></section>
-  <div id="grow">${growHtml()}</div></div>`}
 function gachaHtml(){const G=growOut,busy=G.phase!=='done',grps=[...new Set(G.T.map(t=>t.grp))],f=state.ui.gcf||{k:'',r:''};
   const prog=busy?`<p class="muted">${G.phase==='base'?'目的ごとの最適編成を計算中':'未所持カードを入れた場合を計算中'}… ${G.done} / ${G.total}</p>`:'';
   const rows=[...G.rows.values()].filter(r=>(!f.k||r.k===f.k)&&(!f.r||r.rarity===f.r)).map(r=>({r,...growScore(r)})).filter(x=>x.tot>0.0002).sort((a,b)=>b.tot-a.tot).slice(0,30);
@@ -1325,7 +1321,7 @@ function gachaHtml(){const G=growOut,busy=G.phase!=='done',grps=[...new Set(G.T.
 function viewGacha(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&&growOut.phase!=='done',n=CAT.members.filter(c=>!state.roster.m[c.id]?.own).length+CAT.snaps.filter(c=>!state.roster.s[c.id]?.own).length;
   const sel=g=>`<label class="f">${GROW_GRP[g]}<select id="gw-${g}">${opts([[2,'重視'],[1,'普通'],[0,'使わない']],w[g])}</select></label>`;
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">ガチャ判断</h2>
-    <p class="note">未所持のカード（${n}枚）を1枚ずつ入れたら、遊ぶもの全体でどれだけ伸びるかを並べます。目的は「育成の優先度」と同じで、イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りです。</p>
+    <p class="note">未所持のカード（${n}枚）を1枚ずつ入れたら、遊ぶもの全体でどれだけ伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りです。</p>
     <div class="row">${['ev','ar','gk'].map(sel).join('')}<label class="f">引いたカードの育成<select id="gst">${opts(Object.entries(GACHA_ST),gachaSt())}</select></label><button class="btn primary" data-act="gacha"${busy?' disabled':''}>ガチャ判断を計算</button></div></section>
   <div id="grow">${growHtml()}</div></div>`}
 // ===== 理想編成タブ（2026-10-30）: 今の手持ちを、選んだ項目だけ最大まで育てたと仮定して最適化する =====
@@ -1497,7 +1493,7 @@ function sealUse(k,cid,cost,I=inv()){const r={seal:0,ex:[],months:0,short:[]};
   if(cost.dup)r.short.push('ダブり（計画に入れない）');
   return r}
 // 持ちもの I から、育成1つ分を実際に差し引く（足りない分は交換してから使う）。sealUse と同じ順・同じ数え方。
-// 返り値は sealUse と同じ形。I は書き換わる（アリーナ作戦の計画の途中の持ちもの・「やった」ボタン）
+// 返り値は sealUse と同じ形。I は書き換わる（アリーナ育成の計画の途中の持ちもの・「やった」ボタン）
 function invApply(I,k,cid,cost){const U=sealUse(k,cid,cost,I);if(U.short.length)return U;
   const it=I.it,num=id=>+it[id]||0;
   for(const [id,n] of U.ex){const s=SHOP[id];it[id]=num(id)+n*s[0];if(s[2]){const left=+(I.left[id]??s[2]);I.left[id]=Math.max(0,left-n)}}
@@ -1791,12 +1787,12 @@ function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
 
 function render(){
   renderTabs();
-  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,growth:viewGrowth,gacha:viewGacha,members:viewMembers,snaps:viewSnaps,inv:viewInv,arena:viewArena,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
+  const v={opt:viewOpt,ideal:viewIdeal,compare:viewCompare,gacha:viewGacha,members:viewMembers,snaps:viewSnaps,inv:viewInv,arena:viewArena,songs:viewSongs,event:viewEvent,settings:viewSettings}[state.ui.tab]||viewOpt;
   document.getElementById('view').innerHTML=v();
   inTab(paintStale);
 }
 
-// ===== アリーナ作戦タブ（2026-11-01〜、仕様 docs/arena-planner-spec.md） =====
+// ===== アリーナ育成タブ（2026-11-01〜、旧名アリーナ作戦。仕様 docs/arena-planner-spec.md） =====
 // 段階2: 入力（バンド・撃奏の種類・タイプ・優先度）と ① 種類の診断。
 // 診断: バンドごとに COMBO・LUCK・JUST の勝ち条件の値を、3つの手持ち（今／手持ちを育てきった／リーグの上限＝そのバンドの全カードとスナップ全部を最大）で、
 // そのバンドのアリーナ曲すべてについて「勝ち条件を最高に必須」で最適化して平均する
@@ -1882,7 +1878,7 @@ function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOu
     <td><select data-arp="${esc(b)}" data-f="kind">${opts(ARP_KINDS,c.kind)}</select></td>
     <td><select data-arp="${esc(b)}" data-f="type">${opts([['all','ALL'],...TYPES.map(t=>[t,t])],c.type)}</select></td>
     <td><input type="number" min="1" max="5" step="1" data-arp="${esc(b)}" data-f="pri" value="${c.pri}" style="width:56px"></td></tr>`}).join('');
-  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">アリーナ作戦</h2>
+  return`<div class="stack"><section class="panel stack"><h2 style="margin:0">アリーナ育成</h2>
     <p class="note">撃奏アリーナで、バンドごとに選んだ撃奏の種類で勝つための作戦を立てます。区間の順位は COMBO数・JUST数・LUCKポイントで決まり、同じ数なら区間スコアで決まります。アリーナはバンド別のリーグなので、相手も同じバンドのメンバーだけを使います（スナップは制限なし）。</p>
     ${se?`<p class="note">シーズン：<b>${esc(se[2])}</b>（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
     ${arpTodayHtml()}${arpTermsHtml()}
@@ -1995,7 +1991,7 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
     <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。翌月以降にまわす交換の分も、今のシールから取っておく前提です。</p>
     <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
     <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて計算し直し、最後に選んだ強化を強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
-function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ作戦（Goddess Sakiko）'];
+function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];
   for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.filter(s=>s.band===b).forEach((s,i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}）`))}
   L.push('','■ 交換リスト');for(const x of arpExchanges(P))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`);
   return L.join('\n')}
