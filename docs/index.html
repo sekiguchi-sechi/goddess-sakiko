@@ -669,7 +669,19 @@ function buildFast(){const nM=M.length,nS=S.length,{VIP,T,SE,gk}=CTX,N=nM*nS;
   const B=Float64Array.from(M,m=>m.B);
   // cnt 効果を持つリーダーの対象タイプ（evq で段数を数える）
   const LC=M.map(m=>{const l=m.lead.find(x=>x.k==='cnt');return l?{ty:l.v.split(','),mx:+l.v2}:null});
-  return{nS,nM,B,AF,base,sk,y,pt,it,nj,LP,LC,sv,mv,g2,z:state.settings.orderZ??1.28}}
+  // JUST数獲得量の上乗せ（累積型でなければ定数、累積型は α ごとに覚える）
+  const jgc=M.map(m=>m.jb&&m.jb[0]&&!m.jb[2]?justGain(CTX.song,m.jb,0):(m.jb&&m.jb[0]?null:0)),jgm=M.map(()=>new Map());
+  // LUCK値の表: LUCK 区間の番号、メンバーの行、スナップ（抽選に効く LUCK のもの）の行。luckValue と同じものを先に引いておく
+  let lk=null;if(G){const L=[];G.r.forEach((r,i)=>{if(r[0]===2)L.push(i)});
+    const mem=M.map(m=>m.gekiKind==='LUCK'&&m.gs!=null?{row:G.v[m.gs+'|'],l:m.gl?m.gl-1:(m.awak|0),c:m,f:L.map(i=>luckLv(m,m.gl?m.gl-1:(m.awak|0),i))}:null);
+    const sn=new Array(N);for(let a=0;a<nM;a++)for(let b=0;b<nS;b++){const s=S[b];if(s.gs!=null&&s.gkType==='LUCK'&&!(s.gkPct>0)){const sk=snapKey(G,s,M[a]),l=s.gl??(s.lb|0);sn[a*nS+b]={vg:G.vg?.[sk]||null,row:G.v[sk],f:L.map(i=>luckLv(s,l,i))}}}
+    lk={L,mem,sn}}
+  return{nS,nM,B,AF,base,sk,y,pt,it,nj,LP,LC,sv,mv,g2,jgc,jgm,lk,z:state.settings.orderZ??1.28}}
+// luckValue と同じ値・同じ足し算の順で、buildFast の表を使う版（evq 用）
+function luckValueF(F,G,t,J,gm){const K=F.lk;if(!K||!K.L.length)return 0;const L=K.L;let x=0;
+  for(let i=0;i<5;i++){const a=t.m[i],em=K.mem[a];if(em&&em.row)for(let q=0;q<L.length;q++)x+=(em.row[L[q]]?.[0]||0)*em.f[q];
+    const es=K.sn[J[i]];if(es){const row=es.vg?es.vg[gm]:es.row;if(row)for(let q=0;q<L.length;q++)x+=(row[L[q]]?.[0]||0)*es.f[q]}}
+  return x}
 const EQ_Y=new Float64Array(5),EQ_J=new Int32Array(5),EQ_A=[null,null,null,null,null];
 function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return ev(t);
   const nS=F.nS,nM=F.nM,Li=t.m[t.L],K=CTX.K,gk=CTX.gk;let P=0,Sk=0,pt=0,it=0;const ys=EQ_Y,J=EQ_J;
@@ -685,14 +697,17 @@ function evq(t){const F=CTX.fast||(CTX.fast=buildFast());if(CTX.gk&&!F.g2)return
     // 区間の基礎分は JUST率α（判定幅スナップの枚数で決まる）と順位だけで決まるので、αごとに1回だけ計算して使い回す
     const bm=F.g2.bm||(F.g2.bm=new Map());
     // sec: 区間の値（JUST区間は理論値とPERFECT値×JPをαで混ぜる）。ev の sec と同じ式
-    const add=(inc,e,q)=>{if(!e)return inc;const v=e[0];if(!v)return inc;const lA=e[3],l0=LV[e[1]];
+    // 高速化（2026-11-02）: スナップの表（e[2]）を引くときに配列を作らない。式と足し算の順は前と同じ
+    const addV=(inc,v,l,lA,q)=>{if(!v)return inc;const l0=LV[l];
       for(let x=0;x<v.length;x++){const c=SC[x],w=v[x],f=q===1?c.f1:c.f2,th=w[0]+w[1]*f;inc+=(c.j&&w.length>3?al*th+(1-al)*JP*(w[2]+w[3]*f):th)*c.kk*(lA?lA[x]:l0)}return inc};
     const at=q=>{let base=bm.get(q===1?al:-1-al);if(base===undefined){base=G.b;for(let i=0;i<nr;i++){const r=G.r[i],c=SC[i],f=q===1?c.f1:c.f2,th=r[1]+r[2]*f;base+=(c.j?al*th+(1-al)*JP*(r[4]+r[5]*f):th)*c.kk-(r[1]+r[2])}bm.set(q===1?al:-1-al,base)}let inc=0;
-      for(let i=0;i<5;i++){inc=add(inc,mvv[t.m[i]],q);const e=svv[J[i]];inc=add(inc,e&&e[2]?[e[2][gm],e[1],null,e[3]]:e,q)}
+      for(let i=0;i<5;i++){const em=mvv[t.m[i]];if(em)inc=addV(inc,em[0],em[1],em[3],q);const e=svv[J[i]];if(e)inc=e[2]?addV(inc,e[2][gm],e[1],e[3],q):addV(inc,e[0],e[1],e[3],q)}
       return (P/300000*(base+inc)+P*yb*G.W*(base/G.b))*gkf};
-    const win=at(1),lose=at(2);
-    const mk={};let cb=0,jg=0;for(let i=0;i<5;i++){const m=M[t.m[i]],k=m.gekiKind;if(k)mk[k]=(mk[k]||0)+1;cb+=m.cb||0;if(CTX.needJs&&m.jb)jg+=justGain(CTX.song,m.jb,al)}
-    return{P,Sk,free,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,gk2:true,mk,nj,njc,cb,jg,js:al*(1+jg),lk:CTX.needLk?luckValue(G,t):0}}
+    const win=at(1),lose=CTX.needLose?at(2):null;
+    // JUST数獲得量の上乗せ: 累積型でないものは α に関係しない定数なので buildFast で作っておく（値は justGain と同じ）
+    const mk={};let cb=0,jg=0;for(let i=0;i<5;i++){const a=t.m[i],m=M[a],k=m.gekiKind;if(k)mk[k]=(mk[k]||0)+1;cb+=m.cb||0;
+      if(CTX.needJs&&m.jb){const c=F.jgc[a];if(c!==null)jg+=c;else{const mm=F.jgm[a];let v=mm.get(al);if(v===undefined){v=justGain(CTX.song,m.jb,al);mm.set(al,v)}jg+=v}}}
+    return{P,Sk,free,gkLose:lose,score:win,sd:0,lo:win,hi:win,pt,it,gk2:true,mk,nj,njc,cb,jg,js:al*(1+jg),lk:CTX.needLk?luckValueF(F,G,t,J,gm):0}}
   let sd=0,mx=0;
   if(CTX.sw&&!CTX.rt){const w=CTX.sw,W=w.reduce((a,b)=>a+b,0),wb=W/5;let ysum=0;for(let i=0;i<5;i++)ysum+=ys[i];const yb=ysum/5;
     let vy=0;for(let i=0;i<5;i++)vy+=(ys[i]-yb)**2;vy/=4;const vw=w.reduce((a,x)=>a+(x-wb)**2,0);
