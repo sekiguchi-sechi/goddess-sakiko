@@ -1446,7 +1446,7 @@ async function parIdeal(id,song){if(!(await poolReady()))return false;if(id!==to
 const RES=CAT.res||{aw:{},skl:{},rkn:{},sexp:{},shop:[],items:{},season:[]};
 const SEAL=47,SNAP_EXP=6,NO_COST=new Set([3,5]);// 3=コイン 5=メンバーEXP
 const PIECE_RARS=['R','SR','SSR','BD'];
-// 汎用のメンバーピース（そのレア度ならどのカードにも使える。アイテム 38〜41）。入力欄は SSR と BD
+// 汎用のメンバーピース（そのレア度ならどのカードにも使える。アイテム 38〜41）。入力欄は SR・SSR・BD
 const GEN_PIECE={R:38,SR:39,SSR:40,BD:41};
 // 持ちもの画面の並び（ゲームの持ちもの「育成」と同じ順）
 const INV_ITEMS=[['かけら',[7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]],['クリスタル',[22,23]],['チケット',[24,25,26,27]],['そのほか',[SNAP_EXP,SEAL]]];
@@ -1536,7 +1536,7 @@ function viewInv(){const I=inv(),miss=invMissing(),num=(path,v,w=96)=>`<input ty
     <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-invsexp${I.sexp?' checked':''}> スナップEXPも星のシールに換算する（オフならタダとして扱う）</label></section>
   <section class="panel stack"><h3 style="margin:0">ピース（覚醒用）</h3>
     <p class="note">覚醒1段に 60・120・180・240個（1→5で600個）。使う順は メンバーピース（そのカード専用）→ バンドピース（同じバンド・同じレア度のカードだけ）→ 汎用のメンバーピース（同じレア度ならどのカードにも）→ 星のシールで交換するバンドのメンバーピース(SSR)（SSRカードだけ・1個100シール）。ガチャのダブりは計画に入れません。</p>
-    ${bp}<div class="row">${['SSR','BD'].map(r=>`<label class="f">汎用のメンバーピース(${r})${num('it.'+GEN_PIECE[r],I.it[GEN_PIECE[r]],120)}</label>`).join('')}</div><h3 style="margin:0">メンバーピース</h3>${mp}</section></div>`}
+    ${bp}<div class="row">${['SR','SSR','BD'].map(r=>`<label class="f">汎用のメンバーピース(${r})${num('it.'+GEN_PIECE[r],I.it[GEN_PIECE[r]],120)}</label>`).join('')}</div><h3 style="margin:0">メンバーピース</h3>${mp}</section></div>`}
 // 入力の反映（80-actions の change から呼ぶ）。true を返したら処理済み
 function invInput(el){const I=inv();
   if(el.dataset.inv!=null){const v=el.value===''?'':Math.max(0,Math.floor(+el.value||0));setPath(I,el.dataset.inv,v);if(el.dataset.inv.startsWith('left.'))I.at=invMonth();delete I.reset;save();
