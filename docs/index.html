@@ -1400,6 +1400,7 @@ function workerMain(){let T=null;
       if(j.type==='cmp')r=cmpRow(state.songs.find(x=>x.id===j.sid),j.obj);
       else if(j.type==='gbase'){T||=growTargets();r=growBaseOne(T,j.t)}
       else if(j.type==='grow'){T||=growTargets();r={v:growAny(T,j.key,j.t)}}
+      else if(j.type==='arp')r=arpJob(j.j);
       else if(j.type==='opt'){const song=curSong(),go=()=>{seedRnd(12345);const x=solve(song,state.ui.obj,{gkCmp:true});return{...x,ctx:[M,S,CTX]}};r=j.ideal?withIdeal(go):go()}
     }catch(err){r={error:String(err&&err.message||err)}}
     self.postMessage({gen:d.gen,i:d.i,r})};
@@ -1467,13 +1468,13 @@ function growCost(k,cid,from,to){const out={it:{},pc:0,sexp:0,dup:false},add=(L)
   return out}
 // 値段（並べる順番に使う）: 交換所で手に入る素材を、手持ちの分も含めてすべて星のシールに直す。
 // 覚醒のピースは SSR ならバンドのメンバーピース(SSR)（100シール＝1個）で値段を付ける。それ以外のピースは値段なし
-function sealValue(k,cid,cost){let v=0;for(const id in cost.it){const s=SHOP[id];if(s)v+=cost.it[id]*s[1]/s[0]}
+function sealValue(k,cid,cost,I=inv()){let v=0;for(const id in cost.it){const s=SHOP[id];if(s)v+=cost.it[id]*s[1]/s[0]}
   if(cost.pc&&k==='m'){const c=CM[cid],p=BAND_SSR_PIECE[c?.band],s=p&&SHOP[p];if(c?.rarity==='SSR'&&s)v+=cost.pc*s[1]/s[0]}
-  if(cost.sexp&&inv().sexp){const s=SHOP[SNAP_EXP];if(s)v+=cost.sexp*s[1]/s[0]}
+  if(cost.sexp&&I.sexp){const s=SHOP[SNAP_EXP];if(s)v+=cost.sexp*s[1]/s[0]}
   return v}
 // 使うシール（手持ちで足りない分を交換する）。ピースは メンバーピース → 手持ちのバンドピース（同じバンド・同じレア度） → 交換するバンドSSRピース の順。
 // 返り値 {seal, ex:[[アイテム, 回数, 今月にできる回数]], months:翌月以降に何か月かかるか, short:[足りない理由]}
-function sealUse(k,cid,cost){const I=inv(),r={seal:0,ex:[],months:0,short:[]};
+function sealUse(k,cid,cost,I=inv()){const r={seal:0,ex:[],months:0,short:[]};
   const buy=(id,need)=>{const s=SHOP[id];if(!s){r.short.push(itemName(id)+' '+fmt(need));return}const n=Math.ceil(need/s[0]);r.seal+=n*s[1];
     const lim=s[2],left=lim?Math.max(0,+(I.left[id]??lim)):Infinity,now=Math.min(n,left);r.ex.push([id,n,now]);if(n>now)r.months=Math.max(r.months,Math.ceil((n-now)/lim))};
   for(const id in cost.it){const need=cost.it[id]-(+I.it[id]||0);if(need>0)buy(+id,need)}
@@ -1483,6 +1484,19 @@ function sealUse(k,cid,cost){const I=inv(),r={seal:0,ex:[],months:0,short:[]};
     if(need>0){const p=BAND_SSR_PIECE[c.band];if(c.rarity==='SSR'&&p)buy(p,need);else r.short.push(`覚醒のピース ${need}個（${c.rarity}は交換所に無い）`)}}
   if(cost.dup)r.short.push('ダブり（計画に入れない）');
   return r}
+// 持ちもの I から、育成1つ分を実際に差し引く（足りない分は交換してから使う）。sealUse と同じ順・同じ数え方。
+// 返り値は sealUse と同じ形。I は書き換わる（アリーナ作戦の計画の途中の持ちもの・「やった」ボタン）
+function invApply(I,k,cid,cost){const U=sealUse(k,cid,cost,I);if(U.short.length)return U;
+  const it=I.it,num=id=>+it[id]||0;
+  for(const [id,n] of U.ex){const s=SHOP[id];it[id]=num(id)+n*s[0];if(s[2]){const left=+(I.left[id]??s[2]);I.left[id]=Math.max(0,left-n)}}
+  it[SEAL]=num(SEAL)-U.seal;
+  for(const id in cost.it)it[id]=Math.max(0,num(id)-cost.it[id]);
+  if(cost.sexp&&I.sexp)it[SNAP_EXP]=Math.max(0,num(SNAP_EXP)-cost.sexp);
+  if(cost.pc&&k==='m'){const c=CM[cid];let need=cost.pc;const mp=I.mp.find(x=>String(x[0])===String(cid));
+    if(mp){const u=Math.min(need,+mp[1]||0);mp[1]=(+mp[1]||0)-u;need-=u}
+    if(need>0&&I.bp[c.band]){const u=Math.min(need,+I.bp[c.band][c.rarity]||0);I.bp[c.band][c.rarity]=(+I.bp[c.band][c.rarity]||0)-u;need-=u}
+    const p=BAND_SSR_PIECE[c.band];if(need>0&&p)it[p]=Math.max(0,num(p)-need)}
+  return U}
 const costText=(k,cost)=>{const L=Object.entries(cost.it).map(([id,n])=>`${itemName(id).replace('強化チケット','券').replace('のかけら','')}×${fmt(n)}`);
   if(cost.pc)L.push(`ピース×${cost.pc}`);if(cost.sexp)L.push(`スナップEXP×${fmt(cost.sexp)}`);if(cost.dup)L.push('ダブり');return L.join('・')};
 // ===== 持ちものタブ =====
@@ -1791,10 +1805,10 @@ function arpRoster(scen,band,base){const R=JSON.parse(JSON.stringify(base));if(s
     else if(r&&r.own)R.s[c.id]={...r,lv:c.rk[(r.rk||1)-1][0]}}// 上限解放はダブりが要るので、今の上限解放でLvだけ最大
   return R}
 // 1曲・1種類・1つの手持ちで、勝ち条件を最高に必須にして最適化
-function arpSolve(song,band,kind,type){const st=state.settings,keep={r:st.arenaRule,c:st.gkComboReq,l:st.gkLuckReq,j:st.gkJustReq},ch=state.ui.chSong;
+function arpSolve(song,band,kind,type,strong){const st=state.settings,keep={r:st.arenaRule,c:st.gkComboReq,l:st.gkLuckReq,j:st.gkJustReq},ch=state.ui.chSong;
   const g=arenaReg(band);st.arenaRule={...(keep.r||{}),[band]:{...(g?{at:g[0]}:{}),gk:kind,type}};
   st.gkComboReq=kind==='COMBO'?'max':'';st.gkLuckReq=kind==='LUCK'?'max':'';st.gkJustReq=kind==='JUST'?'max':'';state.ui.chSong='none';
-  try{seedRnd(12345);const r=withFast(()=>solve(song,'arena'));if(!r||r.error||!r.best)return null;const e=r.best.e;
+  try{seedRnd(12345);const r=strong?solve(song,'arena'):withFast(()=>solve(song,'arena'));if(!r||r.error||!r.best)return null;const e=r.best.e;
     const met=kind==='COMBO'?e.cb:kind==='LUCK'?(r.lkMax??e.lk):(r.jsMax??e.js);
     return{met:met||0,score:e.score,sec:e.sec,team:r.best.t.m.map(i=>M[i]?.cid),snaps:r.best.t.s.map(i=>S[i]&&!S[i].none?S[i].cid:null)}}
   catch(err){return null}
@@ -1856,11 +1870,126 @@ function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOu
     ${se?`<p class="note">シーズン：<b>${esc(se[2])}</b>（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
     <div class="tbl"><table><thead><tr><th>バンド</th><th>撃奏の種類</th><th>タイプ</th><th>優先度</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
-    <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button></div></section>
-  <div id="arpRes">${arpResHtml()}</div></div>`}
+    <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button><button class="btn primary" data-act="arenaPlan"${arpPlan&&arpPlan.phase==='run'?' disabled':''}>② 育成プランを計算</button></div>
+    <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます。選ぶたびに候補すべて × アリーナ曲すべてを計算し直すので、数分かかることがあります（進み具合と「止める」ボタンが出ます）。</p></section>
+  <div id="arpRes">${arpResHtml()}</div><div id="arpPlan">${arpPlanHtml()}</div></div>`}
 function arpInput(el){if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
   c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
-function arpAct(a){if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
+function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
+// ===== ② 育成プラン（段階3） =====
+// 優先度の高いバンドから、手持ちの素材（交換してでも）で1つずつ強化を選ぶ。選ぶたびに残りの候補をすべて計算し直す。
+//   1段目（必須）: 勝ち条件の値を「持っているカードを育てきったときの最大」に届くまで上げる強化を、値段の安い順に
+//   2段目（スコア）: 区間スコアの伸び率 ÷ 値段 が高い順
+// 評価は「そのバンドのアリーナ曲すべて × 勝ち条件を最高に必須」の平均（軽めの探索）。最後に選んだ強化を強めの探索で計算し直す
+// 候補（その時点の手持ち R から）。メンバーは特訓（Lv上限まで）・覚醒・スキルLv・撃奏Lv、スナップは今の上限解放でのLvだけ
+function arpUps(band,R,snaps){const out=[],add=(k,cid,cat,up,f,max)=>out.push({k,cid,cat,up,f,max:!!max,key:k+cid+'|'+up});
+  for(const c of CAT.members){if(c.band!==band)continue;const r=R.m[c.id];if(!r?.own||r.excl)continue;const n=c.lim.length,cid=c.id;
+    if(r.tr<n){add('m',cid,'tr',`特訓 ${r.tr}→${r.tr+1}（Lv${c.lim[r.tr]}まで）`,x=>{x.tr++;x.lv=c.lim[x.tr-1]});if(r.tr+1<n)add('m',cid,'tr',`特訓 ${r.tr}→${n}（Lv${c.lim[n-1]}まで）`,x=>{x.tr=n;x.lv=c.lim[n-1]},1)}
+    else if(r.lv<c.lim[r.tr-1])add('m',cid,'tr',`Lv ${r.lv}→${c.lim[r.tr-1]}`,x=>{x.lv=c.lim[x.tr-1]});
+    if(r.rk<5){add('m',cid,'rk',`覚醒 ${r.rk}→${r.rk+1}`,x=>{x.rk++});if(r.rk<4)add('m',cid,'rk',`覚醒 ${r.rk}→5`,x=>{x.rk=5},1)}
+    if(r.sl<5&&c.live[4]>c.live[r.sl-1]){add('m',cid,'sl',`スキルLv ${r.sl}→${r.sl+1}（${c.live[r.sl-1]}%→${c.live[r.sl]}%）`,x=>{x.sl++});if(r.sl<4)add('m',cid,'sl',`スキルLv ${r.sl}→5（${c.live[r.sl-1]}%→${c.live[4]}%）`,x=>{x.sl=5},1)}
+    const gl=r.gl||1;if(c.geki&&gl<5){add('m',cid,'gl',`撃奏Lv ${gl}→${gl+1}`,x=>{x.gl=gl+1});if(gl<4)add('m',cid,'gl',`撃奏Lv ${gl}→5`,x=>{x.gl=5},1)}}
+  for(const sid of snaps){const c=CSN[sid],r=R.s[sid];if(!c||!r?.own)continue;const cap=c.rk[(r.rk||1)-1][0];if(r.lv<cap)add('s',sid,'tr',`Lv ${r.lv}→${cap}`,x=>{x.lv=cap})}
+  return out}
+// バンドの評価（その時点の state.roster で）: 曲ごとの勝ち条件・区間スコア・推定スコアの平均と、編成に入ったスナップ
+function arpEval(band,kind,type,strong){const songs=arenaSongsOf(band);let n=0,met=0,sec=0,score=0;const snaps=new Set();
+  for(const s of songs){const r=arpSolve(s,band,kind,type,strong);if(!r)continue;n++;met+=r.met;sec+=r.sec||0;score+=r.score;for(const x of r.snaps)if(x!=null)snaps.add(x)}
+  return n?{met:met/n,sec:sec/n,score:score/n,snaps:[...snaps]}:null}
+// 1件の計算（Worker でも使う）: j={band,kind,type,scen:'base'|'own'|'cand',key,strong}。state.roster はその時点の手持ち
+function arpJob(j){const keep=state.roster,base=j.R||keep;
+  try{if(j.R){state.roster=j.R;materialize()}
+    if(j.scen==='own'){state.roster=arpRoster('own',j.band,base);materialize()}
+    else if(j.scen==='cand'){const R=JSON.parse(JSON.stringify(base)),u=arpUps(j.band,R,j.snaps||[]).find(x=>x.key===j.key);if(!u)return null;u.f(R[u.k][u.cid]);state.roster=R;materialize()}
+    return arpEval(j.band,j.kind,j.type,j.strong)}
+  finally{state.roster=keep;materialize()}}
+// 並列（Worker）か1本で、jobs をすべて計算する。R=その時点の手持ち
+async function arpRun(id,R,jobs,onEach){const out=new Array(jobs.length);
+  if(await poolReady()){const init={state:{...JSON.parse(JSON.stringify(state)),roster:R},cc:null,clock:arenaClock()};
+    await poolRun(init,jobs.map(j=>({type:'arp',j})),(i,r)=>{out[i]=r&&!r.error?r:null;onEach()},id);return out}
+  const keep=state.roster;
+  for(let i=0;i<jobs.length;i++){if(id!==toolRun)break;state.roster=R;try{out[i]=arpJob(jobs[i])}finally{state.roster=keep;materialize()}onEach();await new Promise(r=>setTimeout(r,0))}
+  return out}
+let arpPlan=null;
+const arpPlanSig=()=>JSON.stringify([arpBands().map(b=>[b,arpCfg(b)]),state.inv,state.roster]).length+'|'+arpSig();
+async function startArenaPlan(){const id=++toolRun,bands=arpBands();
+  if(!bands.length){arpPlan={err:'バンドを1つ以上選んでください。'};render();return}
+  if(invMissing().length){arpPlan={err:'持ちものタブで「今月の交換の残り回数」を入れてください（未入力：'+invMissing().map(itemName).join('、')+'）。'};render();return}
+  const I=JSON.parse(JSON.stringify(inv())),R=JSON.parse(JSON.stringify(state.roster)),P=arpPlan={sig:arpPlanSig(),bands,steps:[],base:{},target:{},fin:{},phase:'run',msg:'',done:0,total:0,seal0:+I.it[SEAL]||0,I0:JSON.parse(JSON.stringify(I))};paintPlan();
+  const tick=()=>{P.done++;paintPlan()};
+  try{for(const b of bands){const cfg=arpCfg(b),kind=cfg.kind,type=cfg.type,eps=x=>Math.max(Math.abs(x)*0.005,1e-6);
+    P.msg=`${b}：今の値と、育てきったときの勝ち条件を計算中`;P.done=0;P.total=2;paintPlan();
+    const [E0,Eo]=await arpRun(id,R,[{band:b,kind,type,scen:'base'},{band:b,kind,type,scen:'own'}],tick);if(id!==toolRun)return;
+    if(!E0){P.base[b]=null;continue}P.base[b]=E0;P.target[b]=Eo?.met??E0.met;let E=E0;
+    for(let round=1;round<=40;round++){
+      const ups=arpUps(b,R,E.snaps).map(u=>{const to=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(to);const cost=growCost(u.k,u.cid,R[u.k][u.cid],to),use=sealUse(u.k,u.cid,cost,I);return{...u,cost,use,val:sealValue(u.k,u.cid,cost,I)}})
+        .filter(u=>!u.use.short.length&&u.use.seal<=(+I.it[SEAL]||0));
+      if(!ups.length)break;
+      P.msg=`${b}：${round}つ目の強化を選んでいます（候補${ups.length}件 × アリーナ曲${arenaSongsOf(b).length}曲）`;P.done=0;P.total=ups.length;paintPlan();
+      const res=await arpRun(id,R,ups.map(u=>({band:b,kind,type,scen:'cand',key:u.key,snaps:E.snaps})),tick);if(id!==toolRun)return;
+      const need=E.met<P.target[b]-eps(P.target[b]);let pick=null,best=-Infinity;
+      ups.forEach((u,i)=>{const e=res[i];if(!e)return;
+        if(need){if(e.met>E.met+eps(E.met)){const sc=-u.val+(e.met-E.met)*1e-6;if(sc>best){best=sc;pick={u,e}}}}
+        else{const g=e.sec/E.sec-1;if(g>1e-4){const sc=g/Math.max(u.val,1);if(sc>best){best=sc;pick={u,e}}}}});
+      if(!pick)break;
+      const {u,e}=pick,from=JSON.parse(JSON.stringify(R[u.k][u.cid]));u.f(R[u.k][u.cid]);const U=invApply(I,u.k,u.cid,u.cost);
+      P.steps.push({band:b,kind,type,k:u.k,cid:u.cid,up:u.up,cat:u.cat,need,from,to:JSON.parse(JSON.stringify(R[u.k][u.cid])),cost:u.cost,val:u.val,use:U,before:E,after:e,seal:+I.it[SEAL]||0});
+      E=e;paintPlan()}
+    P.fin[b]=E}
+    // 強めの探索で計算し直す: 各バンドの元の手持ちと、選んだ強化を順に足した手持ち
+    const jobs=[],at=[];const Rv=JSON.parse(JSON.stringify(state.roster));
+    for(const b of bands){const cfg=arpCfg(b);jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,-1]);
+      P.steps.forEach((s,i)=>{const r=Rv[s.k][s.cid]={...Rv[s.k][s.cid],...s.to};if(s.band===b){jobs.push({band:b,kind:cfg.kind,type:cfg.type,scen:'base',strong:true,R:JSON.parse(JSON.stringify(Rv))});at.push([b,i])}})}
+    P.msg='選んだ強化を、強めの探索で計算し直しています';P.done=0;P.total=jobs.length;paintPlan();
+    const V=await arpRun(id,state.roster,jobs,tick);if(id!==toolRun)return;
+    V.forEach((r,i)=>{const [b,si]=at[i];if(si<0)P.base[b]={...P.base[b],v:r};else P.steps[si].v=r})
+    P.I=I;P.phase='done'}
+  catch(err){P.phase='done';P.err2=String(err&&err.message||err)}
+  paintPlan()}
+function paintPlan(){const el=document.getElementById('arpPlan');if(el)el.innerHTML=arpPlanHtml();const b=document.querySelector('[data-act="arenaPlan"]');if(b)b.disabled=!!(arpPlan&&arpPlan.phase==='run')}
+// 交換リスト（計画全体）: アイテムごとの回数と、今月の残り回数で今月にできる分／翌月以降
+function arpExchanges(P){const m=new Map();for(const s of P.steps)for(const [id,n] of s.use.ex)m.set(id,(m.get(id)||0)+n);
+  return[...m].map(([id,n])=>{const s=SHOP[id],lim=s[2],left=lim?+(P.I0.left[id]??lim):Infinity,now=Math.min(n,left);return{id,n,qty:n*s[0],seal:n*s[1],now,later:n-now,months:lim&&n>now?Math.ceil((n-now)/lim):0}})}
+const stepCard=s=>{const c=(s.k==='m'?CM:CSN)[s.cid];return c?(s.k==='m'?`${c.chara}${c.rarity}「${c.title}」`:`スナップ「${c.title}」`):''};
+const pctS=(a,b)=>a&&b?pct(b/a-1):'—';
+function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class="panel muted">${esc(P.err)}</div>`;
+  if(P.phase==='run')return`<section class="panel stack"><p class="muted">${esc(P.msg)}… ${P.done} / ${P.total}　選んだ強化 ${P.steps.length}件 <button class="btn small" data-act="arenaPlanStop">止める</button></p>
+    ${P.steps.length?`<p class="note">${P.steps.map((s,i)=>`${i+1}. ${esc(stepCard(s))} ${esc(s.up)}`).join('<br>')}</p>`:''}</section>`;
+  const stale=P.sig!==arpPlanSig()?'<p class="note warn">入力（バンドの設定・持ちもの・手持ち）が変わったので計算し直してください（下は前回の結果）。</p>':'';
+  const used=P.seal0-(P.I?(+P.I.it[SEAL]||0):P.seal0),ex=arpExchanges(P);
+  const bandHtml=b=>{const cfg=arpCfg(b),B=P.base[b];if(!B)return`<section class="panel"><h3 style="margin:0">${esc(b)}</h3><p class="muted">計算できませんでした（手持ちのメンバーが5人未満など）。</p></section>`;
+    const L=P.steps.map((s,i)=>({s,i})).filter(x=>x.s.band===b),b0=B.v||B,last=L.length?(L[L.length-1].s.v||L[L.length-1].s.after):b0;
+    let prev=b0;const rows=L.map(({s,i},n)=>{const v=s.v||s.after,r=`<tr${s.done?' class="sel"':''}><td>${n+1}</td><td>${s.need?'<span class="pill">必須</span>':'スコア'}</td><td>${esc(stepCard(s))}</td><td>${esc(s.up)}</td>
+      <td class="num">${arpMet(s.kind,prev.met)} → ${arpMet(s.kind,v.met)}</td><td class="num">${pctS(prev.sec,v.sec)}</td><td class="num">${pctS(prev.score,v.score)}</td>
+      <td style="font-size:12px">${esc(costText(s.k,s.cost))}</td><td class="num">${fmt(Math.round(s.val))}</td><td class="num">${fmt(s.use.seal)}${s.use.months?`<br><span class="muted">翌月以降 ${s.use.months}か月</span>`:''}</td>
+      <td>${s.done?'✓':`<button class="btn small" data-act="arpDone" data-i="${i}">やった</button>`}</td></tr>`;prev=v;return r}).join('');
+    return`<section class="panel stack"><h3 style="margin:0">${esc(b)} <span class="muted" style="font-size:13px;font-weight:500">（${cfg.kind}・タイプ ${cfg.type==='all'?'ALL':esc(cfg.type)}・優先度 ${cfg.pri}）</span></h3>
+      <p class="note">勝ち条件（${ARP_MET_LABEL[cfg.kind]}）：${arpMet(cfg.kind,b0.met)} → <b>${arpMet(cfg.kind,last.met)}</b>（育てきったときの最大 ${arpMet(cfg.kind,P.target[b])}）／区間スコア ${fmt(b0.sec)} → <b>${fmt(last.sec)}</b>（${pctS(b0.sec,last.sec)}）／推定スコア ${fmt(b0.score)} → ${fmt(last.score)}（${pctS(b0.score,last.score)}）</p>
+      ${rows?`<div class="tbl"><table><thead><tr><th>#</th><th>段</th><th>カード</th><th>強化</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th><th>素材</th><th class="num">値段</th><th class="num">使うシール</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
+      <div class="row"><button class="btn small" data-act="arpShow" data-b="${esc(b)}">この条件で編成を見る</button></div></section>`};
+  return stale+(P.err2?`<p class="note warn">${esc(P.err2)}</p>`:'')+P.bands.map(bandHtml).join('')+
+    `<section class="panel stack"><h3 style="margin:0">交換リスト</h3>
+    ${ex.length?`<div class="tbl"><table><thead><tr><th>交換するもの</th><th class="num">回数</th><th class="num">個数</th><th class="num">シール</th><th>今月／翌月以降</th></tr></thead><tbody>
+      ${ex.map(x=>`<tr><td>${esc(itemName(x.id))}</td><td class="num">${x.n}回</td><td class="num">${fmt(x.qty)}</td><td class="num">${fmt(x.seal)}</td><td>${x.later?`今月 ${x.now}回・<span class="warn">翌月以降 ${x.later}回（${x.months}か月。毎月1日4:00以降）</span>`:'今月にすべて'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">交換は要りません（手持ちで足ります）。</p>'}
+    <p class="note">使う星のシール：<b>${fmt(used)}</b>（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。翌月以降にまわす交換の分も、今のシールから取っておく前提です。</p>
+    <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
+    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて計算し直し、最後に選んだ強化を強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
+function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ作戦（Goddess Sakiko）'];
+  for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.filter(s=>s.band===b).forEach((s,i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}）`))}
+  L.push('','■ 交換リスト');for(const x of arpExchanges(P))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`);
+  return L.join('\n')}
+// ボタン。true＝保存して描き直す／'done'＝処理済み（描き直さない）／false＝ここの担当ではない
+function arpPlanAct(a,el){const P=arpPlan;
+  if(a==='arenaPlan'){startArenaPlan();return true}
+  if(a==='arenaPlanStop'){toolRun++;if(P&&P.phase==='run'){P.phase='done';P.err2='途中で止めました（そこまでに選んだ強化を表示しています。強めの探索での計算し直しはしていません）。'}return true}
+  if(a==='arpDone'&&P){const s=P.steps[+el.dataset.i];if(!s||s.done)return true;const r=state.roster[s.k][s.cid];
+    if(!r||['lv','tr','rk','sl','gl'].some(f=>s.from[f]!=null&&(r[f]??1)!==s.from[f])){alert('手持ちがこの強化の前の状態と違うので、反映できません（先に前の強化を「やった」にするか、手持ちを直してください）。');return 'done'}
+    invApply(inv(),s.k,s.cid,s.cost);for(const f of ['lv','tr','rk','sl','gl'])if(s.to[f]!=null)r[f]=s.to[f];r.ed=1;materialize();s.done=1;P.sig=arpPlanSig();lastResult=idealRes=null;return true}
+  if(a==='arpShow'){const b=el.dataset.b,c=arpCfg(b),s=arenaSongsOf(b).sort((x,y)=>(y.gk2?.b||0)-(x.gk2?.b||0))[0];if(!s)return 'done';const st=state.settings,g=arenaReg(b);
+    st.arenaRule={...(st.arenaRule||{}),[b]:{...(g?{at:g[0]}:{}),gk:c.kind,type:c.type}};if(c.kind==='COMBO')st.gkComboReq='max';if(c.kind==='LUCK')st.gkLuckReq='max';
+    state.ui.song=s.id;state.ui.obj='arena';state.ui.tab='opt';save();render();runOpt();return 'done'}
+  if(a==='arpCopy'){const t=arpPlanText(),ok=()=>{const m=document.getElementById('arpCopyMsg');if(m)m.textContent='コピーしました。'};
+    if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).then(ok,()=>prompt('コピーしてください',t));else prompt('コピーしてください',t);return 'done'}
+  return false}
 // JSON取り込み: 全体のバックアップ（songs と roster を含む）なら置き換え、それ以外は書いてある項目だけ上書き
 function importData(o){
   if(!o||typeof o!=='object')throw 0;
@@ -1899,7 +2028,7 @@ document.addEventListener('click',e=>{
   const hp=e.target.closest('[data-help]');if(hp){if(matchMedia('(hover:hover)').matches)return;const b=document.getElementById(hp.dataset.help);if(b){b.hidden=!b.hidden;hp.setAttribute('aria-expanded',String(!b.hidden))}return}
   if(e.target.id==='run'){runOpt();return}
   const a=e.target.closest('[data-act]')?.dataset.act;if(!a)return;
-  if(invAct(a,e.target.closest('[data-act]'))||arpAct(a)){save();render();return}
+  {const ae=e.target.closest('[data-act]'),r=invAct(a,ae)||arpAct(a,ae);if(r==='done')return;if(r){save();render();return}}
   const msg=t=>{const m=document.getElementById('jsonMsg');if(m)m.textContent=t};
   switch(a){
     case'useAuthor':if(Object.values(state.roster.m).some(r=>r.own)&&state.rosterSrc!=='author'&&!confirm('今の手持ちの登録を、作者の手持ちに置き換えますか？（先に「ファイルに書き出す」で控えを取れます）'))return;useAuthor();lastResult=idealRes=null;break;
