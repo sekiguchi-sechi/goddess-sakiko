@@ -197,6 +197,13 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
   table.mcard td{display:flex;gap:12px;justify-content:space-between;align-items:baseline;text-align:right;border:0;padding:3px 0}
   table.mcard td::before{content:attr(data-l);color:var(--muted);text-align:left;flex:none;max-width:45%;font-size:12px}
   table.mcard td[data-l=""]::before{display:none}}
+
+/* アリーナ育成の表: 折り返して横スクロールを短く（2026-11-02） */
+.arp-plan td{white-space:normal;vertical-align:top}
+.arp-plan td:nth-child(2){min-width:170px}
+.arp-plan td:nth-child(5){min-width:150px}
+.arp-plan td.arp-do{text-align:center;white-space:nowrap}
+.arp-plan td.arp-do div{margin-top:4px}
 </style>
 
 <header class="top">
@@ -2166,14 +2173,15 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
     <p class="note">使う星のシール：<b>${fmt(used)}</b>${P.budget!=null?`／予算 ${fmt(P.budget)}`:''}（手持ち ${fmt(P.seal0)} → 残り ${fmt(P.seal0-used)}）。${P.later?'翌月以降にまわす交換の分も、今のシールから取っておく前提です。':'今月中に交換できる強化だけを選んでいます（翌月以降にまわす交換は入れていません）。'}</p>`;
   const bandHtml=b=>{const cfg=arpCfg(b),B=P.base[b];if(!B)return`<section class="panel"><h3 style="margin:0">${esc(b)}</h3><p class="muted">計算できませんでした（手持ちのメンバーが5人未満など）。</p></section>`;
     const L=P.steps.map((s,i)=>({s,i})).filter(x=>x.s.band===b),b0=B.v||B,last=L.length?(L[L.length-1].s.v||L[L.length-1].s.after):b0;
-    let prev=b0;const rows=L.map(({s,i},n)=>{const v=s.v||s.after,r=`<tr${s.done?' class="sel"':''}><td>${n+1}</td><td>${s.need?'<span class="pill">必須</span>':'スコア'}</td><td>${esc(stepCard(s))}</td><td>${esc(s.up)}</td>
-      <td class="num">${arpMet(s.kind,prev.met)} → ${arpMet(s.kind,v.met)}</td><td class="num">${pctS(prev.sec,v.sec)}</td><td class="num">${pctS(prev.score,v.score)}</td>
-      <td style="font-size:12px">${esc(costText(s.k,s.cost))}</td><td class="num">${fmt(Math.round(s.val))}</td><td class="num">${fmt(s.use.seal)}${s.use.months?`<br><span class="muted">翌月以降 ${s.use.months}か月</span>`:''}</td>
-      <td class="num">${fmt(cum[i])}</td>
-      <td>${s.done?'✓':`<button class="btn small" data-act="arpDone" data-i="${i}">やった</button>`}</td></tr>`;prev=v;return r}).join('');
+    let prev=b0;const rows=L.map(({s,i},n)=>{const v=s.v||s.after,r=`<tr${s.done?' class="sel"':''}>
+      <td class="arp-do"><b>${n+1}</b>${s.done?'<div>✓</div>':`<div><button class="btn small" data-act="arpDone" data-i="${i}">やった</button></div>`}</td>
+      <td>${s.need?'<span class="pill">必須</span> ':''}<b>${esc(stepCard(s))}</b><div>${esc(s.up)}</div></td>
+      <td class="num"><b>${fmt(s.use.seal)}</b><div class="muted">累計 ${fmt(cum[i])}</div>${s.use.months?`<div class="muted">翌月以降 ${s.use.months}か月</div>`:''}</td>
+      <td style="font-size:12px">勝ち条件 ${arpMet(s.kind,prev.met)} → ${arpMet(s.kind,v.met)}<div>区間 ${pctS(prev.sec,v.sec)}・推定 ${pctS(prev.score,v.score)}</div></td>
+      <td style="font-size:12px">${esc(costText(s.k,s.cost))}<div class="muted">値段 ${fmt(Math.round(s.val))}</div></td></tr>`;prev=v;return r}).join('');
     return`<section class="panel stack"><h3 style="margin:0">${esc(b)} <span class="muted" style="font-size:13px;font-weight:500">（${cfg.kind}・タイプ ${cfg.type==='all'?'ALL':esc(cfg.type)}・優先度 ${cfg.pri}）</span></h3>
       <p class="note">勝ち条件（${ARP_MET_LABEL[cfg.kind]}）：${arpMet(cfg.kind,b0.met)} → <b>${arpMet(cfg.kind,last.met)}</b>（育てきったときの最大 ${arpMet(cfg.kind,P.target[b])}）／区間スコア ${fmt(b0.sec)} → <b>${fmt(last.sec)}</b>（${pctS(b0.sec,last.sec)}）／推定スコア ${fmt(b0.score)} → ${fmt(last.score)}（${pctS(b0.score,last.score)}）</p>
-      ${rows?`<div class="tbl"><table><thead><tr><th>#</th><th>段</th><th>カード</th><th>強化</th><th class="num">勝ち条件</th><th class="num">区間スコア</th><th class="num">推定スコア</th><th>素材</th><th class="num">値段</th><th class="num">使うシール</th><th class="num">累計</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
+      ${rows?`<div class="tbl"><table class="arp-plan"><thead><tr><th>#</th><th>強化</th><th class="num">使うシール</th><th>伸び</th><th>素材</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="muted">手持ちの素材でできる、伸びる強化はありませんでした。</p>'}
       <div class="row"><button class="btn small" data-act="arpShow" data-b="${esc(b)}">この条件で編成を見る</button></div></section>`};
   return stale+(P.err2?`<p class="note warn">${esc(P.err2)}</p>`:'')+P.bands.map(bandHtml).join('')+
     `<section class="panel stack"><h3 style="margin:0">交換リスト${P.sep?'（バンドごと・別々に計算）':''}</h3>
