@@ -205,6 +205,9 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 .arp-plan td.arp-do{text-align:center;white-space:nowrap}
 .arp-plan td.arp-do div{margin-top:4px}
 @media (max-width:600px){.arp-plan td,.arp-plan th{padding:6px 5px}.arp-plan td:nth-child(2){min-width:120px}.arp-plan td:nth-child(5){min-width:120px}}
+.arp-more>summary{font-weight:400;font-size:13px;color:var(--muted)}
+.arp-more[open]>summary{margin-bottom:4px}
+.arp-ul{margin:4px 0;padding-left:20px;line-height:1.7}
 </style>
 
 <header class="top">
@@ -2043,26 +2046,27 @@ function arpResHtml(){const O=arpOut;if(!O)return'';if(O.err)return`<div class="
     return`<section class="panel stack"><h3 style="margin:0">${esc(b)} <span class="muted" style="font-size:13px;font-weight:500">（タイプ ${cfg.type==='all'?'ALL':esc(cfg.type)}・アリーナ曲 ${n}曲の平均）</span></h3>
       ${warn?`<p class="note warn">選んだ ${cfg.kind} は、手持ちを育てきってもリーグの上限に届きません。</p>`:''}
       <div class="tbl"><table><thead><tr><th>種類</th><th class="num">リーグの上限</th><th class="num">自分の今 → 育成後の最大</th><th>上限に届くまで</th><th class="num">区間スコア<br><span class="muted">推定スコア</span></th><th>同点のとき</th></tr></thead><tbody>${rows}</tbody></table></div></section>`}).join('')+
-    `<p class="note">勝ち条件の値：COMBO＝${ARP_MET_LABEL.COMBO}（撃奏Lv1〜4で区間の最初の数秒しか効かないスキルは、効く秒数の割合で数える）、LUCK＝${ARP_MET_LABEL.LUCK}（LUCKポイントの代わりの指標）、JUST＝${ARP_MET_LABEL.JUST}。それぞれ「最高に必須」で最適化した編成の値で、区間スコア・推定スコアは今の手持ちでその編成のときの値です。「育成後の最大」は持っているカードをすべて最大まで育てた場合（スナップの上限解放はダブりが要るので今のまま）、「リーグの上限」はそのバンドの全カードとスナップ全部を最大にした場合です。</p>`}
+    arpMore('表の見方',`<p class="note">勝ち条件の値：COMBO＝${ARP_MET_LABEL.COMBO}（撃奏Lv1〜4で区間の最初の数秒しか効かないスキルは、効く秒数の割合で数える）、LUCK＝${ARP_MET_LABEL.LUCK}（LUCKポイントの代わりの指標）、JUST＝${ARP_MET_LABEL.JUST}。それぞれ「最高に必須」で最適化した編成の値で、区間スコア・推定スコアは今の手持ちでその編成のときの値です。「育成後の最大」は持っているカードをすべて最大まで育てた場合（スナップの上限解放はダブりが要るので今のまま）、「リーグの上限」はそのバンドの全カードとスナップ全部を最大にした場合です。</p>`)}
+const arpMore=(t,h)=>`<details class="arp-more"><summary>${t}</summary>${h}</details>`;
 function viewArena(){const I=inv(),miss=invMissing(),se=arenaSeason(),busy=arpOut&&arpOut.phase==='run';
   const rows=BAND_NAMES.map(b=>{const c=arpCfg(b);return`<tr><td><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-arp="${esc(b)}" data-f="on"${c.on?' checked':''}>${esc(b)}</label></td>
     <td><select data-arp="${esc(b)}" data-f="kind">${opts(ARP_KINDS,c.kind)}</select></td>
     <td><select data-arp="${esc(b)}" data-f="type">${opts([['all','ALL'],...TYPES.map(t=>[t,t])],c.type)}</select></td>
     <td><input type="number" min="1" max="5" step="1" data-arp="${esc(b)}" data-f="pri" value="${c.pri}" style="width:56px"></td></tr>`}).join('');
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">アリーナ育成</h2>
-    <p class="note">撃奏アリーナで、バンドごとに選んだ撃奏の種類で勝つための作戦を立てます。区間の順位は COMBO数・JUST数・LUCKポイントで決まり、同じ数なら区間スコアで決まります。アリーナはバンド別のリーグなので、相手も同じバンドのメンバーだけを使います（スナップは制限なし）。</p>
+    <p class="note">バンドと撃奏の種類を選んで、① 診断 → ② 育成プラン の順に計算します。</p>
     ${se?`<p class="note">シーズン：<b>${esc(se[2])}</b>（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
-    ${arpTodayHtml()}${arpTermsHtml()}
+    ${arpTodayHtml()}${arpMore('しくみ・用語',`<p class="note">区間の順位は COMBO数・JUST数・LUCKポイントで決まり、同じ数なら区間スコアで決まります。アリーナはバンド別のリーグなので、相手も同じバンドのメンバーだけを使います（スナップは制限なし）。</p><ul class="note arp-ul">${ARP_TERMS.map(([,l,t])=>`<li><b>${l}</b>：${t}</li>`).join('')}</ul>`)}
     <div class="tbl"><table><thead><tr><th>バンド</th><th>撃奏の種類</th><th>タイプ</th><th>優先度</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="note">持ちもの：${miss.length?`<b class="warn">今月の交換の残り回数が未入力（${miss.length}件）</b>`:'入力済み'}・星のシール ${fmt(+I.it[SEAL]||0)} <button class="btn small" data-tab="inv">持ちものを入力する</button></p>
     <div class="row"><button class="btn primary" data-act="arenaDiag"${busy?' disabled':''}>① 種類の診断を計算</button><button class="btn primary" data-act="arenaPlan"${arpPlan&&arpPlan.phase==='run'?' disabled':''}>② 育成プランを計算</button></div>
-    <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-arplater${arpLater()?' checked':''}> ② で、翌月以降にまわす交換（今月の残り回数を超える分）も計画に入れる（オフなら今月中に交換できる強化だけ）</label>
-    <label class="f" style="flex-direction:row;align-items:center;gap:6px">② で使う星のシールの予算：<input type="number" min="0" step="100" data-arpbudget value="${arpBudget()??''}" placeholder="手持ちすべて" style="width:120px">（空欄なら手持ちすべて。別々に計算するときはバンドごとの予算）</label>
-    <label class="f" style="flex-direction:row;align-items:center;gap:6px">② で複数のバンドを選んだとき：<select data-arpsep>${opts([['0','順番に計算（優先度の高いバンドから素材を使う）'],['1','別々に計算（比較用。どのバンドも今の手持ちから）']],arpSep()?'1':'0')}</select></label>
-    <p class="note">② は優先度の順に、手持ちの素材と星のシールを使い切るまで強化を選びます（「別々に計算」ではバンドごとに今の手持ちを使い切るまで）。選ぶたびに候補すべてを、長さ別に選んだアリーナ曲5曲で計算し直し、最後に選んだ強化を全曲で計算し直します。手持ちが多いと数分かかります（進み具合と「止める」ボタンが出ます）。</p></section>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-arplater${arpLater()?' checked':''}> 翌月以降の交換も計画に入れる</label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">シールの予算：<input type="number" min="0" step="100" data-arpbudget value="${arpBudget()??''}" placeholder="手持ちすべて" style="width:120px"></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">複数バンド：<select data-arpsep>${opts([['0','順番に（優先度の高い順に素材を使う）'],['1','別々に（比較用）']],arpSep()?'1':'0')}</select></label>
+    ${arpMore('② の設定の説明',`<ul class="note arp-ul"><li>翌月以降の交換：今月の残り回数を超える交換も入れる。オフなら今月中に交換できる強化だけ。</li><li>シールの予算：空欄なら手持ちすべて。「別々に」ではバンドごと。</li><li>順番に：優先度の高いバンドから素材を使い、残りを次のバンドへ。別々に：どのバンドも今の手持ちから計算（どれか1つを選ぶための比較用）。</li><li>手持ちが多いと数分かかります（途中で止められます）。</li></ul>`)}</section>
   <div id="arpRes">${mcard(arpResHtml())}</div><div id="arpPlan">${mcard(arpPlanHtml())}</div>${arpDaysHtml()}
   <section class="panel stack"><h3 style="margin:0">④ 持っていないカード（参考）</h3>
-    <p class="note">持っていないカードを1枚ずつ、フル育成（特訓・覚醒・スキルLv・撃奏Lv・上限解放をすべて最大）で持っていると仮定して、選んだ種類の最適編成に入るものと伸びを出します。ガチャが要るので計画には入れません。候補はそのバンドの持っていないメンバーと、選んだ種類の撃奏サポートを持つスナップ（JUSTは判定幅スナップも）です。</p>
+    <p class="note">持っていないカードを、最大まで育てて持っていたらどれだけ伸びるか（ガチャの参考。計画には入れません）。</p>
     <div class="row"><button class="btn small" data-act="arenaMiss"${arpMiss&&arpMiss.phase==='run'?' disabled':''}>④ を計算</button></div><div id="arpMiss">${mcard(arpMissHtml())}</div></section></div>`}
 function arpInput(el){if(el.hasAttribute('data-arplater')){(state.ui.arp??={b:{}}).later=el.checked;save();render();return true}
   if(el.hasAttribute('data-arpbudget')){(state.ui.arp??={b:{}}).budget=el.value===''?null:Math.max(0,Math.floor(+el.value||0));save();render();return true}
@@ -2187,8 +2191,8 @@ function arpPlanHtml(){const P=arpPlan;if(!P)return'';if(P.err)return`<div class
   return stale+(P.err2?`<p class="note warn">${esc(P.err2)}</p>`:'')+P.bands.map(bandHtml).join('')+
     `<section class="panel stack"><h3 style="margin:0">交換リスト${P.sep?'（バンドごと・別々に計算）':''}</h3>
     ${P.sep?P.bands.map(b=>`<h4 style="margin:4px 0 0">${esc(b)}</h4>`+exHtml(arpExchanges(P,b),P.seal0-(+P.Ib?.[b]?.it[SEAL]||0))).join('')+'<p class="note">別々に計算したので、交換・シールはバンドごとの量です（合計はできません。どれか1つのバンドを選んでやる前提）。</p>':exHtml(ex,used)}
-    <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div></section>
-    <p class="note">選び方：バンドの優先度の順に、まず勝ち条件を「育てきったときの最大」まで上げる強化（必須）を値段の安い順に、そのあと区間スコアの伸び率÷値段の高い順に、手持ち（交換を含む）でできる限り選びます。選ぶたびに残りの候補をすべて、長さ別に選んだアリーナ曲5曲（最短・最長を含む等間隔）で計算し直し、最後に選んだ強化を全曲・強めの探索で計算し直した値を表に出しています。「値段」は要る素材をすべて星のシールに直した量、「使うシール」は足りない分の交換に使う量です。「累計」は上の行から順にやったときの使うシールの合計です（順番に計算したときは優先度の高いバンドの分を含み、別々に計算したときはバンドごと）。別々に計算したときは、どのバンドも今の手持ちから選んでいるので、2つ以上のバンドをやると素材が足りなくなることがあります。「やった」を押すと、手持ちと持ちものをその強化のあとの状態に更新します。</p>`}
+    <div class="row"><button class="btn small" data-act="arpCopy">テキストをコピー</button><span id="arpCopyMsg" class="note"></span></div>
+    ${arpMore('表の見方・選び方',`<ul class="note arp-ul"><li>上の行から順にやります（下の行は上をやった前提）。「やった」を押すと手持ちが更新されます。</li><li>必須：勝ち条件を育てきったときの最大まで上げる強化。安い順に選び、そのあとは区間スコアの伸び÷値段の高い順。</li><li>使うシール：足りない素材の交換に使う量。累計は上からの合計（「別々に」ではバンドごと）。</li><li>値段：要る素材をすべて星のシールに直した量。</li><li>伸びは、選んだ強化を最後に全曲で計算し直した値です。</li></ul>`)}</section>`}
 function arpPlanText(){const P=arpPlan;if(!P||P.phase!=='done')return'';const L=['アリーナ育成（Goddess Sakiko）'];const cum=arpCum(P);
   for(const b of P.bands){const c=arpCfg(b);L.push('',`■ ${b}（${c.kind}・タイプ ${c.type==='all'?'ALL':c.type}）`);P.steps.map((s,j)=>[s,j]).filter(([s])=>s.band===b).forEach(([s,j],i)=>L.push(`${i+1}. ${s.need?'[必須] ':''}${stepCard(s)} ${s.up}（${costText(s.k,s.cost)}／使うシール ${fmt(s.use.seal)}・累計 ${fmt(cum[j])}）`))}
   const exL=(t,b)=>{L.push('',t);for(const x of arpExchanges(P,b))L.push(`${itemName(x.id)} ${x.n}回（${fmt(x.seal)}シール）${x.later?` うち翌月以降 ${x.later}回`:''}`)};
@@ -2222,9 +2226,9 @@ function arpDays(b,kind){const L=MY_DATA.arena?.reg?.[b]||[],now=arenaClock()/10
   return[...seen.values()]}
 function arpDaysHtml(){const bs=arpBands();if(!bs.length)return'';const se=arenaSeason();
   return`<section class="panel stack"><h3 style="margin:0">③ プレイする日</h3>
-    ${se?`<p class="note">シーズン：${esc(se[2])}（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）。マスターに載っているルールの分だけ並べます。</p>`:''}
+    ${se?`<p class="note">シーズン：${esc(se[2])}（${esc(mdHm(se[0]))} 〜 ${esc(mdHm(se[1]))}）</p>`:''}
     ${bs.map(b=>{const c=arpCfg(b),D=arpDays(b,c.kind);return`<div><b>${esc(b)} ${c.kind}</b>：${D.length?`この計画が効く日はあと <b>${D.length}日</b><div class="daychips">${D.map(d=>{const ok=c.type==='all'||d.types.has(c.type)||d.types.has('all');return`<span class="daychip${ok?'':' off'}" title="${ok?'':'計算に使ったタイプと違う日'}">${d.md}(${d.wd}) ${[...d.types].map(TYPE_ALL).join('・')}</span>`}).join('')}</div>`:'<span class="muted">シーズンの残りに、この種類の日はありません（またはルールがまだマスターに無い）。</span>'}</div>`}).join('')}
-    <p class="note">タイプを ALL 以外にしたときは、計算に使ったタイプと違う日を薄く表示します。</p></section>`}
+    <p class="note">薄い日は、計算に使ったタイプと違う日です。</p></section>`}
 // ④ 持っていないカード（参考）: フル育成で持っていると仮定して、選んだ種類の最適編成（勝ち条件を最高に必須）に入るか・どれだけ伸びるか
 let arpMiss=null;
 function arpMissCands(b,kind){const out=[];
@@ -2250,7 +2254,6 @@ function qh(id,label,text){return`<span class="helpwrap"><button type="button" c
 const ARP_TERMS=[['arpT1','勝ち条件','区間の順位を決める値（公式ヘルプ: 基準1）。COMBO＝最大コンボ数（1ノーツごとに 1＋効いている上乗せ）、JUST＝累計JUST数（(推定JUST率＋変換スナップで増える分)×(1＋上乗せ)で見る）、LUCK＝LUCK pt（抽選の仕組みどおりの期待値）。同じ値なら区間スコアで決まります（基準2）。'],
   ['arpT2','区間スコア','撃奏区間だけのスコア（順位ボーナス抜き）。勝ち条件の値が同じ相手とは、これで順位が決まります。'],
   ['arpT3','上乗せ','撃奏スキルの「撃奏COMBO獲得量+N」「JUST数獲得量+N」。撃奏Lv1〜4で区間の最初の2〜5秒だけのもの、「撃奏COMBO○以上継続中」でコンボ数が届いてから効くものは、譜面のノーツ数で効く分だけ数えます（Lv5で区間ずっと）。']];
-const arpTermsHtml=()=>`<p class="note">用語：${ARP_TERMS.map(([id,l,t])=>`${l} ${qh(id,l,t)}`).join('　')}</p>${ARP_TERMS.map(([id,l,t])=>`<p class="helpbox note" id="${id}" hidden><b>${l}</b>：${t}</p>`).join('')}`;
 // スマホでは表をカード型にする: 見出しの文字を各セルの data-l に入れる（CSS の table.mcard）
 function mcard(html){return html.replace(/<table>([\s\S]*?)<\/table>/g,(all,inner)=>{const ths=[...inner.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map(m=>m[1].replace(/<br>/g,'／').replace(/<[^>]+>/g,'').trim());
   return'<table class="mcard">'+inner.replace(/<tr([^>]*)>([\s\S]*?)<\/tr>/g,(row,attr,cells)=>{if(cells.includes('<th'))return row;let i=0;return`<tr${attr}>`+cells.replace(/<td(?=[\s>])/g,()=>`<td data-l="${esc(ths[i++]||'')}"`)+'</tr>'})+'</table>'})}
