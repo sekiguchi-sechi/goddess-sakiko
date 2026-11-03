@@ -211,6 +211,15 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 /* メンバー・スナップ表: 見出しを固定（表の中で縦にスクロール。2026-11-03） */
 .tbl.sticky{max-height:max(300px,calc(100vh - 160px));overflow:auto;scroll-margin-top:110px}
 .tbl.sticky thead th{position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--line)}
+/* 最大まで育てたら: 編成の横並び（2026-11-03） */
+.mx-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mx-col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mx-h{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.mx-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--panel-2);font-size:13px;line-height:1.6}
+.mx-card.new{border-color:var(--accent)}
+.mx-card.out{opacity:.6}
+.mx-up{font-size:12px;margin-top:2px}
+@media (max-width:600px){.mx-grid{grid-template-columns:1fr}}
 </style>
 
 <header class="top">
@@ -1564,7 +1573,14 @@ function maxHtml(){const R=lastResult;if(!R?.best||R.obj==null)return'';
   return`<div class="panel stack"><div class="row" style="align-items:center;gap:12px"><h2 style="margin:0">最大まで育てたら</h2>${btn}</div>
     <p class="note">持っているカードをすべて最大まで育てたときの最適編成です。${add.length?`今の編成から入れ替わるカード：<b>${esc(add.join('、'))}</b>`:'メンバーの顔ぶれは今と同じです。'}</p>
     <div class="tbl"><table><thead><tr><th>項目</th><th class="num">今</th><th class="num">最大まで育てたら</th><th class="num">差</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${teamTable(b.rows,MAX_F)}${b.ch?`<h3 style="margin:6px 0 0">チャレンジの編成</h3>${teamTable(b.ch.rows,MAX_F)}`:''}</div>`}
+    ${maxSide(a.rows,b.rows,R.obj==='ptTotal'||R.obj==='itemTotal'?'フリーの編成':'編成')}${b.ch&&a.ch?maxSide(a.ch.rows,b.ch.rows,'チャレンジの編成'):''}</div>`}
+// 編成を「今」と「最大まで育てたら」の2列で並べる（狭い画面では縦に積む）。最大の側は育成内容、今と違うカードには印
+function maxSide(A,B,title){const up=idealUps(MAX_F),inA=new Set(A.map(r=>r.mcid)),inB=new Set(B.map(r=>r.mcid));
+  const card=(r,max)=>`<div class="mx-card${max?(inA.has(r.mcid)?'':' new'):(inB.has(r.mcid)?'':' out')}">
+    <div>${r.lead?'<span class="lead">★</span> ':''}<b>${esc(r.chara)}</b> <span class="muted">${esc(r.rarity)}</span> ${chip(r.type)}${r.ord?` <span class="muted">${r.ord}番目</span>`:''}${max&&!inA.has(r.mcid)?' <span class="pill">入れ替え</span>':''}</div>
+    <div>${esc(r.name)}</div><div class="muted">${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'スナップなし'}</div>
+    ${max?`<div class="mx-up">${up(r)}</div>`:''}</div>`;
+  return`<h3 style="margin:6px 0 0">${title}</h3><div class="mx-grid"><div class="mx-col"><div class="mx-h">今</div>${A.map(r=>card(r,false)).join('')}</div><div class="mx-col"><div class="mx-h">最大まで育てたら</div>${B.map(r=>card(r,true)).join('')}</div></div>`}
 // ===== 並列計算（Web Worker、2026-10-30） =====
 // 同じスクリプト（APP_SRC。データ込み）を Worker で動かし、最適化の繰り返しをCPUのコアごとに分ける:
 //   全曲比較（曲ごと）・育成タブ（目的ごと・候補ごと）・理想編成（今の手持ちと理想を同時に）
