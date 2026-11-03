@@ -208,6 +208,9 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 .arp-more>summary{font-weight:400;font-size:13px;color:var(--muted)}
 .arp-more[open]>summary{margin-bottom:4px}
 .arp-ul{margin:4px 0;padding-left:20px;line-height:1.7}
+/* メンバー・スナップ表: 見出しを固定（表の中で縦にスクロール。2026-11-03） */
+.tbl.sticky{max-height:75vh;overflow:auto}
+.tbl.sticky thead th{position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--line)}
 </style>
 
 <header class="top">
@@ -1295,7 +1298,7 @@ function renderResult(){
     ${R.tie?`<p class="note">同じ勝ち条件の中では${R.tie==='sec'?'<b>区間スコア</b>が最大（同じ数の相手に区間の順位で勝ちやすい）':'<b>推定スコア</b>が最大'}の編成です（区間スコア ${fmt(e.sec||0)}）。</p>`:''}
     ${R.arena?`<p class="note"><b>アリーナのルール（${esc(song.band||'')}）：タイプ ${R.arena.type==='all'?'ALL':esc(R.arena.type||song.type)}${R.arena.type?'':'（楽曲のまま）'}／撃奏区間 ${R.arena.gk} ×3</b></p>`:isGk(R.obj)?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
+  </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}${state.ui.tab==='opt'?`<div id="maxCmp">${maxHtml()}</div>`:''}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）。育成の計算は 66-growth.js（ガチャ判断が使う） =====
@@ -1320,11 +1323,10 @@ function viewCompare(){const o=state.ui.cmpObj||state.ui.obj||'ptTotal',useCh=o=
       <button class="btn primary" data-act="cmpSongs"${busy?' disabled':''}>全曲を計算</button>
     </div>
     <p class="note">今の手持ち・イベントで、全曲それぞれの最適編成を求めて並べます。最適化タブで1曲ずつ計算したときと同じ編成・値になります。チャレンジライブの目的はイベントの課題曲どうしで比べます。行の「この曲で計算」で最適化タブに移ります。</p></section>
-  <section class="panel row" style="padding:10px 14px"><label class="f">表示する曲を曲名で絞り込む<input id="cmpQ" value="${esc(state.ui.cmpQ||'')}" placeholder="曲名の一部" style="width:220px"></label></section>
   <div id="cmp">${cmpHtml()}</div></div>`}
 function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=busy?`<p class="muted">計算中… ${T.done} / ${T.total}</p>`:'';
   // 並べ替え（2026-11-01 追加: 推定スコア・曲名・バンド・長さ）。値の高い順が既定。1分あたりは周回効率の目的だけ
-  const SORTS=cmpSorts(T.obj);let key=state.ui.cmpSort||'val';if(!SORTS.some(x=>x[0]===key))key='val';
+  const SORTS=cmpSorts(T.obj);let key=state.ui.cmpSort||(perMin(T.obj)?'min':'val');if(!SORTS.some(x=>x[0]===key))key='val';
   // 表示の絞り込み（バンド・タイプ・曲名）。計算はやり直さない。並びは同じ値なら、1回あたり→1分あたり（時間効率）の高い順
   const F=cmpFilter(),bandOf=r=>r.band||'その他',q=nzq(state.ui.cmpQ),bi=r=>{const i=BAND_NAMES.indexOf(r.band);return i<0?99:i};
   const num=k=>(a,b)=>(b[k]??-1)-(a[k]??-1),tie=(a,b)=>perMin(T.obj)?(b.pm??-1)-(a.pm??-1)||(b.val??-1)-(a.val??-1):(b.val??-1)-(a.val??-1);
@@ -1332,17 +1334,18 @@ function cmpHtml(){if(!cmpOut)return'';const T=cmpOut,busy=T.done<T.total,prog=b
     name:(a,b)=>a.name.localeCompare(b.name,'ja'),band:(a,b)=>bi(a)-bi(b)||tie(a,b),short:(a,b)=>(a.len||0)-(b.len||0)||tie(a,b),long:(a,b)=>(b.len||0)-(a.len||0)||tie(a,b)}[key];
   const all=[...T.rows].sort((a,b)=>(!!a.err-!!b.err)||cmpF(a,b));
   const rows=all.filter(r=>(!F.band.length||F.band.includes(bandOf(r)))&&(!F.type.length||F.type.includes(r.type))&&(!q||nzq(r.name).includes(q)));
-  const grp=(k,label,items,typed)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(v=>`<button type="button" class="fchip${typed?' chip t-'+esc(v):''}${F[k].includes(v)?' on':''}" data-cmpf="${k}" data-v="${esc(v)}" aria-pressed="${F[k].includes(v)}">${esc(v)}</button>`).join('')}${F[k].length?`<button type="button" class="fclear" data-cmpf="${k}" data-v="">解除</button>`:''}</div>`;
   const ar=T.obj==='arena',bands=[...BAND_NAMES,...(all.some(r=>!r.band)?['その他']:[])];
   return`<section class="panel stack"><h3 style="margin:0">${esc(OBJECTIVES.find(o=>o.id===T.obj)?.label||'')}</h3>${prog}
-    <div class="row"><label class="f">並べ替え<select id="cmpSortSel">${opts(SORTS,key)}</select></label>${perMin(T.obj)?`<span class="muted" style="font-size:12px">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</span>`:''}</div>
-    <div class="fchips">${grp('band','バンド',bands)}${grp('type','タイプ',TYPES,true)}</div>
-    ${F.band.length||F.type.length||q?`<p class="muted" style="margin:0">${all.length}曲中 ${rows.length}曲を表示</p>`:''}
-    <div class="tbl"><table><thead><tr><th>#</th><th>曲</th>${ar?'<th>バンド</th><th>今日の撃奏</th>':'<th>推定ランク</th>'}<th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
+    <div class="row"><label class="f">曲名で検索<input id="cmpQ" value="${esc(state.ui.cmpQ||'')}" placeholder="曲名の一部" style="width:220px"></label>
+      <label class="f">並べ替え<select id="cmpSortSel">${opts(SORTS,key)}</select></label><span class="muted" id="cmpCount">${rows.length}曲 / 全${all.length}曲</span></div>
+    <div class="fchips">${songChips(F,'band','バンド',bands,false,'data-cmpf')}${songChips(F,'type','タイプ',TYPES,true,'data-cmpf')}</div>
+    ${perMin(T.obj)?`<p class="note">1分あたり＝1回の値 ÷（曲の長さ＋${PLAY_OVERHEAD}秒）</p>`:''}
+    <div id="cmpList">    <div class="tbl"><table><thead><tr><th>#</th><th>曲</th>${ar?'<th>バンド</th><th>今日の撃奏</th>':'<th>推定ランク</th>'}<th class="num">推定スコア</th>${valCol(T.obj)?`<th class="num">${objUnit(T.obj)}</th>`:''}${perMin(T.obj)?'<th class="num">1分あたり</th>':''}<th class="num">長さ</th><th></th></tr></thead><tbody>
     ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${ar?`<td>${esc(r.band)}</td><td>${(()=>{const R=arenaRule(r.band);return`<b>${esc(R.gk)}</b> <span class="muted">${R.type==='all'?'ALL':esc(R.type||'')}</span>`})()}</td>`:''}${r.err?`<td colspan="${(ar?2:3)+valCol(T.obj)+perMin(T.obj)}" class="muted">${esc(r.err)}</td>`:`${ar?'':`<td><b>${RANKS[r.rank]}</b></td>`}<td class="num">${valCol(T.obj)?fmt(r.score):`<b>${fmt(r.score)}</b>`}</td>${valCol(T.obj)?`<td class="num"><b>${fmt(r.val)}</b></td>`:''}${perMin(T.obj)?`<td class="num">${fmt(r.pm)}</td>`:''}<td class="num">${Math.round(r.len)}秒</td>`}<td><button class="btn small" data-act="cmpPick" data-song="${r.id}">この曲で計算</button></td></tr>`).join('')}
-    </tbody></table></div></section>`}
+    </tbody></table></div></div></section>`}
 const cmpSorts=o=>[['val',perMin(o)?'1回あたりが多い順':`${objUnit(o)}が高い順`],...(perMin(o)?[['min','1分あたりが多い順']]:[]),...(valCol(o)?[['score','推定スコアが高い順']]:[]),['name','曲名順'],['band','バンド順'],['short','短い順'],['long','長い順']];
 function cmpFilter(){const u=state.ui;if(!u.cmpF||!Array.isArray(u.cmpF.band)||!Array.isArray(u.cmpF.type))u.cmpF={band:[],type:[]};return u.cmpF}
+function paintCmpList(){const h=cmpHtml(),el=document.getElementById('cmpList'),c=document.getElementById('cmpCount');if(!el){paintCmp();return}const d=document.createElement('div');d.innerHTML=h;el.innerHTML=d.querySelector('#cmpList').innerHTML;if(c)c.textContent=d.querySelector('#cmpCount').textContent}
 function paintCmp(){const el=document.getElementById('cmp');if(el)el.innerHTML=cmpHtml();const b=document.querySelector('[data-act="cmpSongs"]');if(b)b.disabled=!!(cmpOut&&cmpOut.done<cmpOut.total)}
 // 楽曲比較: 全曲を順に最適化
 function startCompare(){
@@ -1479,7 +1482,6 @@ function gachaHtml(){const G=growOut,busy=G.phase!=='done',grps=[...new Set(G.T.
   const rows=[...G.rows.values()].filter(r=>(!f.k||r.k===f.k)&&(!f.r||r.rarity===f.r)).map(r=>({r,...growScore(r)})).filter(x=>x.tot>0.0002).sort((a,b)=>b.tot-a.tot).slice(0,30);
   const grp=(key,label,items)=>`<div class="fgroup"><span class="flabel">${label}</span>${items.map(([v,l])=>`<button type="button" class="fchip${(f[key]||'')===v?' on':''}" data-gcf="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
   return`<section class="panel stack"><h3 style="margin:0">引くと伸びるカード <span class="muted" style="font-size:13px;font-weight:500">（${esc(GACHA_ST[G.gst]||'')}で計算）</span></h3>${prog}
-    <p class="note">未所持のカードを1枚ずつ手持ちに入れて最適化し直したときの伸びです（イベントは pt、アリーナと撃奏ライブは推定スコア）。今のイベントのボーナス対象カードは、そのイベントの間だけの伸びも含みます。ガチャで引けるか・いつ引けるかは考えていません。</p>
     <details><summary class="muted">計算した目的（${G.T.length}件）</summary><p class="note">${G.T.map((t,i)=>esc(t.label)+(G.base[i]>0||i>=G.base.length?'':'（計算できず）')).join('／')}</p></details>
     <div class="fchips">${grp('k','種類',[['','すべて'],['m','メンバー'],['s','スナップ']])}${grp('r','レア',[['','すべて'],['SSR','SSR'],['BD','BD'],['SR','SR'],['R','R']])}</div>
     ${rows.length?`<div class="tbl"><table><thead><tr><th>#</th><th>カード</th><th>レア</th><th class="num">総合</th>${grps.map(g=>`<th class="num">${GROW_GRP[g]}${g==='ar'?'（平均／最大）':''}</th>`).join('')}</tr></thead><tbody>
@@ -1488,7 +1490,8 @@ function gachaHtml(){const G=growOut,busy=G.phase!=='done',grps=[...new Set(G.T.
 function viewGacha(){const w=growW(),song=curSong(),busy=growOut&&!growOut.err&&growOut.phase!=='done',n=CAT.members.filter(c=>!state.roster.m[c.id]?.own).length+CAT.snaps.filter(c=>!state.roster.s[c.id]?.own).length;
   const sel=g=>`<label class="f">${GROW_GRP[g]}<select id="gw-${g}">${opts([[2,'重視'],[1,'普通'],[0,'使わない']],w[g])}</select></label>`;
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">ガチャ判断</h2>
-    <p class="note">未所持のカード（${n}枚）を1枚ずつ入れたら、遊ぶもの全体でどれだけ伸びるかを並べます。イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通りです。</p>
+    <p class="note">持っていないカード（${n}枚）のうち、引くと編成が伸びるものを並べます。</p>
+    ${arpMore('しくみ',`<ul class="note arp-ul"><li>未所持のカードを1枚ずつ手持ちに入れて最適化し直し、伸びを比べます（イベントは pt、アリーナと撃奏ライブは推定スコア）。</li><li>イベントと撃奏ライブは最適化タブで選んでいる曲（今：${esc(song?.name||'なし')}）、アリーナはバンドごとの代表曲で COMBO・LUCK・JUST の3通り。</li><li>今のイベントのボーナス対象カードは、そのイベントの間だけの伸びも含みます。ガチャで引けるか・いつ引けるかは考えていません。</li></ul>`)}
     <div class="row">${['ev','ar','gk'].map(sel).join('')}<label class="f">引いたカードの育成<select id="gst">${opts(Object.entries(GACHA_ST),gachaSt())}</select></label><button class="btn primary" data-act="gacha"${busy?' disabled':''}>ガチャ判断を計算</button></div></section>
   <div id="grow">${growHtml()}</div></div>`}
 // ===== 理想編成タブ（2026-10-30）: 今の手持ちを、選んだ項目だけ最大まで育てたと仮定して最適化する =====
@@ -1504,7 +1507,7 @@ function idealRoster(f=idealF()){const R=JSON.parse(JSON.stringify(state.roster|
     if(f.rk)r.rk=c.rk.length;if(f.lv)r.lv=c.rk[r.rk-1][0];clampR('s',c,r)}
   return R}
 // 手持ちを理想の状態にして fn を実行し、元に戻す
-function withIdeal(fn){const keep=state.roster;state.roster=idealRoster();materialize();try{return fn()}finally{state.roster=keep;materialize()}}
+function withIdeal(fn,f){const keep=state.roster;state.roster=idealRoster(f);materialize();try{return fn()}finally{state.roster=keep;materialize()}}
 // 理想編成タブでは、最適化タブの結果（lastResult・shownIdx）と理想編成の結果を入れ替えて、同じ表示・操作の処理を使う
 function inTab(fn){if(state.ui.tab!=='ideal')return fn();
   [lastResult,idealRes]=[idealRes,lastResult];[shownIdx,idealShown]=[idealShown,shownIdx];
@@ -1529,6 +1532,39 @@ function idealUps(f){const I=idealRoster(f),R=state.roster;
     const s=r.scid!=null&&R.s[r.scid],si=s&&I.s[r.scid];
     if(s&&si){const x=[d('上限解放',s.rk,si.rk),d('Lv',s.lv,si.lv)].filter(Boolean);if(x.length)out.push('<span class="muted">スナップ</span> '+x.join('・'))}
     return out.length?out.join('<br>'):'<span class="muted">育成済み</span>'}}
+
+// ===== 最適化タブ「最大まで育てたら」（2026-11-03）: 今の手持ちを全部最大まで育てたときの最適編成を計算し、今の結果と項目ごとに並べる
+// maxRes.base は計算したときの lastResult（今の結果を計算し直したら古くなるので、ボタンに戻す）
+let maxRes=null;
+const MAX_F={tr:true,lv:true,sl:true,gl:true,rk:true};
+// 結果の要約（R.ctx の状態で呼ぶ）
+function resSummary(R){const P=R.best,e=ev({...P.t,detail:true}),C=R.chal,bp=bestOrderPos(e);
+  return{obj:R.obj,val:P.val,rank:P.rank,score:e.score,max:e.ord?e.ord[e.ord.length-1].s:null,P:e.P,pt:e.pt,it:e.it,sec:e.sec,
+    rows:e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})),ch:C?{score:C.score,P:C.P,rank:C.rank,rows:C.slots}:null}}
+function runOptMax(){const song=curSong(),base=lastResult;if(!song||!base?.best)return;maxRes={base,busy:true};paintMax();
+  setTimeout(()=>{if(maxRes?.base!==base)return;
+    try{const r=withIdeal(()=>{seedRnd(12345);const r={...solve(song,base.obj),obj:base.obj};return r.best?{s:resSummary(r)}:{err:'最大まで育てても、どのランクにも届く編成がありません。'}},MAX_F);maxRes={base,...r}}
+    catch(e){maxRes={base,err:'計算できませんでした。'}}
+    if(base.ctx)[M,S,CTX]=base.ctx;paintMax()},30)}
+function paintMax(){const el=document.getElementById('maxCmp');if(el)el.innerHTML=maxHtml()}
+function maxHtml(){const R=lastResult;if(!R?.best||R.obj==null)return'';
+  const X=maxRes&&maxRes.base===R?maxRes:null;
+  const btn=`<button class="btn" data-act="optMax"${X?.busy?' disabled':''}>${X?.busy?'計算中…':'最大まで育てたら？'}</button>`;
+  if(!X||X.busy)return`<div class="panel row" style="align-items:center;gap:12px">${btn}<span class="note">持っているカードをすべて最大（特訓・レベル・覚醒・スキルLv・撃奏Lv・スナップの上限解放）まで育てたときの最適編成と比べます。</span></div>`;
+  if(X.err)return`<div class="panel warn">${esc(X.err)}</div>`;
+  if(R.ctx)[M,S,CTX]=R.ctx;const a=resSummary(R),b=X.s,lab=OBJECTIVES.find(o=>o.id===R.obj)?.label||'';
+  const d=(x,y,p)=>x==null||y==null?'':y===x?'<span class="muted">±0</span>':`${y>x?'+':''}${fmt(Math.round(y-x))}${p&&x?`<span class="muted">（${y>x?'+':''}${((y/x-1)*100).toFixed(1)}%）</span>`:''}`;
+  const row=(k,x,y,f=v=>fmt(Math.round(v)),p=true)=>x==null&&y==null?'':`<tr><td>${k}</td><td class="num">${x==null?'—':f(x)}</td><td class="num"><b>${y==null?'—':f(y)}</b></td><td class="num">${d(x,y,p)}</td></tr>`;
+  const ev=R.obj==='ptTotal'||R.obj==='itemTotal'||R.obj==='chscore',ar=R.obj==='arena';
+  const rows=[row(`目的の値（${esc(lab)}）`,a.val,b.val),ar?'':`<tr><td>推定ランク</td><td class="num">${RANKS[a.rank]}</td><td class="num"><b>${RANKS[b.rank]}</b></td><td></td></tr>`,
+    row('推定スコア（平均）',a.score,b.score),row('最高スコア（発動順が最良）',a.max,b.max),row('推定総合力',a.P,b.P),
+    ar?row('区間スコア',a.sec,b.sec):'',ev?row('ボーナス pt %',a.pt,b.pt,v=>'+'+v+'%',false):'',ev?row('ボーナス バッジ %',a.it,b.it,v=>'+'+v+'%',false):'',
+    a.ch||b.ch?row('チャレンジ 推定スコア',a.ch?.score,b.ch?.score):'',a.ch||b.ch?row('チャレンジ 総合力',a.ch?.P,b.ch?.P):''].join('');
+  const cur=new Set(a.rows.map(r=>r.mcid)),add=b.rows.filter(r=>!cur.has(r.mcid)).map(r=>`${r.chara}「${r.name}」`);
+  return`<div class="panel stack"><div class="row" style="align-items:center;gap:12px"><h2 style="margin:0">最大まで育てたら</h2>${btn}</div>
+    <p class="note">持っているカードをすべて最大まで育てたときの最適編成です。${add.length?`今の編成から入れ替わるカード：<b>${esc(add.join('、'))}</b>`:'メンバーの顔ぶれは今と同じです。'}</p>
+    <div class="tbl"><table><thead><tr><th>項目</th><th class="num">今</th><th class="num">最大まで育てたら</th><th class="num">差</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${teamTable(b.rows,MAX_F)}${b.ch?`<h3 style="margin:6px 0 0">チャレンジの編成</h3>${teamTable(b.ch.rows,MAX_F)}`:''}</div>`}
 // ===== 並列計算（Web Worker、2026-10-30） =====
 // 同じスクリプト（APP_SRC。データ込み）を Worker で動かし、最適化の繰り返しをCPUのコアごとに分ける:
 //   全曲比較（曲ごと）・育成タブ（目的ごと・候補ごと）・理想編成（今の手持ちと理想を同時に）
@@ -1758,7 +1794,7 @@ function viewMembers(){
     <h2 style="margin:0">メンバー</h2>
     <p class="note">ゲームの全カードが並んでいます。持っているカードの「所持」にチェックを入れ、メンバー詳細の <b>Lv・特訓・覚醒・ライブスキルLv・撃奏スキルLv</b> を合わせてください。総合力やスキルの値は自動で計算されます。未所持のカードは編成に入りません（値は覚えておけます）。</p>
     ${filterBar('m')}</section>${emptyNote('m')}
-  <div class="tbl"><table><thead><tr><th>所持</th><th>固定</th><th>除外</th><th>キャラ</th><th>カード名</th><th>レア</th><th>タイプ</th><th>Lv</th><th>特訓</th><th>覚醒</th><th>スキルLv</th><th>撃奏Lv</th><th class="num">総合力</th><th>リーダースキル</th><th>ライブスキル</th><th>撃奏</th><th>イベント補正</th></tr></thead>
+  <div class="tbl sticky"><table><thead><tr><th>所持</th><th>固定</th><th>除外</th><th>キャラ</th><th>カード名</th><th>レア</th><th>タイプ</th><th>Lv</th><th>特訓</th><th>覚醒</th><th>スキルLv</th><th>撃奏Lv</th><th class="num">総合力</th><th>リーダースキル</th><th>ライブスキル</th><th>撃奏</th><th>イベント補正</th></tr></thead>
   <tbody>${rows}</tbody></table></div></div>`;
 }
 function viewSnaps(){
@@ -1780,7 +1816,7 @@ function viewSnaps(){
     <h2 style="margin:0">スナップ</h2>
     <p class="note">持っているスナップの「所持」にチェックを入れ、スナップ詳細の <b>Lv・上限解放</b> を合わせてください。補正%・延長秒・撃奏サポートは自動で計算されます。</p>
     ${filterBar('s')}</section>${emptyNote('s')}
-  <div class="tbl"><table><thead><tr><th>所持</th><th>固定</th><th>除外</th><th>スナップ名</th><th>レア</th><th>タイプ</th><th>バンド</th><th>キャラ</th><th>Lv</th><th>上限解放</th><th>補正 P/T/V</th><th>スキル延長</th><th>撃奏サポート</th><th>イベント補正</th></tr></thead>
+  <div class="tbl sticky"><table><thead><tr><th>所持</th><th>固定</th><th>除外</th><th>スナップ名</th><th>レア</th><th>タイプ</th><th>バンド</th><th>キャラ</th><th>Lv</th><th>上限解放</th><th>補正 P/T/V</th><th>スキル延長</th><th>撃奏サポート</th><th>イベント補正</th></tr></thead>
   <tbody>${rows}</tbody></table></div></div>`;
 }
 // 公開版の楽曲一覧（閲覧のみ）: 曲名・バンド・タイプ・長さ・撃奏区間・ランクの必要スコア
@@ -1798,12 +1834,14 @@ function viewSongList(){const q=nzq(state.ui.songQ),F=songFilter();
   const bands=[...BAND_NAMES,...(state.songs.some(s=>!s.band)?['その他']:[])];
   return`<div class="stack"><section class="panel stack"><h2 style="margin:0">曲一覧</h2>
     <div class="row"><label class="f">曲名で検索<input id="songQ" value="${esc(state.ui.songQ||'')}" placeholder="曲名の一部" style="width:220px"></label>
-      <label class="f">並べ替え<select id="slSort">${opts(SONG_SORTS,F.sort)}</select></label><span class="muted">${list.length}曲 / 全${state.songs.length}曲</span></div>
+      <label class="f">並べ替え<select id="slSort">${opts(SONG_SORTS,F.sort)}</select></label><span class="muted" id="slCount">${list.length}曲 / 全${state.songs.length}曲</span></div>
     <div class="fchips">${songChips(F,'band','バンド',bands,false,'data-slf')}${songChips(F,'type','タイプ',TYPES,true,'data-slf')}${songChips(F,'gk','撃奏区間',['JUST','COMBO','LUCK'],false,'data-slf')}</div>
     <p class="note">難易度はすべて EXPERT です。必要スコアはフリー・チャレンジライブのランクの基準です。撃奏区間の絞り込みは、その種類の区間を含む曲です。</p></section>
-  <div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>バンド</th><th>タイプ</th><th class="num">長さ</th><th>撃奏区間</th>${['A','S','SS'].map(r=>`<th class="num">${r}</th>`).join('')}</tr></thead><tbody>
+  <div id="slList"><div class="tbl"><table><thead><tr><th>曲名・難易度</th><th>バンド</th><th>タイプ</th><th class="num">長さ</th><th>撃奏区間</th>${['A','S','SS'].map(r=>`<th class="num">${r}</th>`).join('')}</tr></thead><tbody>
   ${list.map(s=>`<tr><td>${esc(s.name)}</td><td style="font-size:12px">${esc(s.band||'—')}</td><td>${chip(s.type==='all'?'':s.type)}</td><td class="num">${Math.round(s.len||0)}秒</td><td style="font-size:12px">${gkLabel(s.id).replace(/<[^>]+>/g,'').trim()||'—'}</td>${['A','S','SS'].map(r=>`<td class="num">${s.thr?.[r]?fmt(s.thr[r]):'—'}</td>`).join('')}</tr>`).join('')}
-  </tbody></table></div></div>`}
+  </tbody></table></div></div></div>`}
+// 曲名の入力中は一覧だけ描き直す（入力欄のフォーカスを保つ）
+function paintSongList(){const el=document.getElementById('slList'),c=document.getElementById('slCount');if(!el){render();const q=document.getElementById('songQ');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}return}const d=document.createElement('div');d.innerHTML=viewSongList();el.innerHTML=d.querySelector('#slList').innerHTML;if(c)c.textContent=d.querySelector('#slCount').textContent}
 function viewSongs(){if(PUBLIC)return viewSongList();
   return viewSongList()+`<details class="panel" id="songEdit"${state.ui.songEdit?' open':''}><summary><b>楽曲の編集（作者用）</b></summary><div class="stack" style="margin-top:8px"><section class="stack">
     <div class="row"><h2 style="margin:0">楽曲</h2><button class="btn small primary" data-act="addSong">＋ 追加</button></div>
@@ -1898,7 +1936,7 @@ function viewData(){const st=state.settings,nm=state.members.length,ns=state.sna
     <h3 style="margin:6px 0 0">キャラクターランク</h3>
     ${BAND_NAMES.map(b=>`<div class="row">${BANDS[b].map(c=>`<label class="f">${esc(c)}<input type="number" data-set="charaRankLv.${c}" value="${st.charaRankLv?.[c]??1}" step="1" min="1" style="width:64px"></label>`).join('')}</div>`).join('')}
   </section>
-  <section class="panel stack"><h2>JSONの形式</h2>${jsonHelp(true)}</section></div>`;
+  <section class="panel stack">${jsonHelp(false)}</section></div>`;
 }
 function viewSettings(){if(PUBLIC)return viewData();const st=state.settings;
   return`<div class="stack">
@@ -1964,7 +2002,9 @@ function render(){
 // 診断: バンドごとに COMBO・LUCK・JUST の勝ち条件の値を、3つの手持ち（今／手持ちを育てきった／リーグの上限＝そのバンドの全カードとスナップ全部を最大）で、
 // そのバンドのアリーナ曲すべてについて「勝ち条件を最高に必須」で最適化して平均する
 const ARP_KINDS=['COMBO','LUCK','JUST'];
-function arpCfg(b){const u=state.ui.arp??={b:{}};u.b??={};return u.b[b]??={on:false,kind:'JUST',type:'all',pri:BAND_NAMES.indexOf(b)+1}}
+// 撃奏の種類・タイプは、自分で選ぶまでは今日のルールに合わせる（2026-11-03。kindSet/typeSet＝自分で選んだ）
+function arpCfg(b){const u=state.ui.arp??={b:{}};u.b??={};const c=u.b[b]??={on:false,kind:'JUST',type:'all',pri:BAND_NAMES.indexOf(b)+1};
+  const g=arenaReg(b);if(g){if(!c.kindSet&&ARP_KINDS.includes(g[3]))c.kind=g[3];if(!c.typeSet&&g[2])c.type=g[2]==='all'||TYPES.includes(g[2])?g[2]:'all'}return c}
 const arpBands=()=>BAND_NAMES.filter(b=>arpCfg(b).on).sort((a,b)=>(+arpCfg(a).pri||9)-(+arpCfg(b).pri||9));
 // 翌月以降にまわす交換（月の上限を超える分）も計画に入れるか（初期値オン）
 const arpLater=()=>(state.ui.arp??={b:{}}).later!==false;
@@ -2072,7 +2112,7 @@ function arpInput(el){if(el.hasAttribute('data-arplater')){(state.ui.arp??={b:{}
   if(el.hasAttribute('data-arpbudget')){(state.ui.arp??={b:{}}).budget=el.value===''?null:Math.max(0,Math.floor(+el.value||0));save();render();return true}
   if(el.hasAttribute('data-arpsep')){(state.ui.arp??={b:{}}).sep=el.value==='1';save();render();return true}
   if(el.dataset.arp==null)return false;const c=arpCfg(el.dataset.arp),f=el.dataset.f;
-  c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;save();render();return true}
+  c[f]=f==='on'?el.checked:f==='pri'?Math.max(1,Math.min(5,+el.value||1)):el.value;if(f==='kind')c.kindSet=true;if(f==='type')c.typeSet=true;save();render();return true}
 function arpAct(a,el){const p=arpPlanAct(a,el);if(p==='done')return 'done';if(p)return true;if(a==='arenaDiag'){startArenaDiag();return true}if(a==='arenaMiss'){startArenaMiss();return true}if(a==='arenaStop'){toolRun++;if(arpOut)arpOut={err:'計算を止めました。'};return true}return false}
 // ===== ② 育成プラン（段階3） =====
 // 優先度の高いバンドから、手持ちの素材（交換してでも）で1つずつ強化を選ぶ。選ぶたびに残りの候補をすべて計算し直す。
@@ -2306,6 +2346,7 @@ document.addEventListener('click',e=>{
       (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);msg('書き出しました（ダウンロードフォルダを確認してください）。');return}
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
+    case'optMax':runOptMax();return;
     case'cmpSongs':startCompare();return;
     case'grow':startGrow();return;
     case'gacha':startGrow('gacha');return;
@@ -2350,8 +2391,8 @@ document.addEventListener('change',e=>{
   if(el.dataset.cf){cardFilter()[el.dataset.cf]=el.value;save();render();return}
   if(el.id==='slSort'){songFilter().sort=el.value;save();render();return}
   if(el.id==='cmpSortSel'){state.ui.cmpSort=el.value;save();paintCmp();return}
-  if(el.id==='cmpQ'){state.ui.cmpQ=el.value;save();paintCmp();return}
-  if(el.id==='songQ'){state.ui.songQ=el.value;save();render();document.getElementById('songQ')?.focus();return}
+  if(el.id==='cmpQ'){state.ui.cmpQ=el.value;save();paintCmpList();return}
+  if(el.id==='songQ'){state.ui.songQ=el.value;save();paintSongList();return}
   if(el.id==='importFile'){const fl=el.files&&el.files[0];if(!fl)return;fl.text().then(t=>{try{const m=importData(JSON.parse(t));lastResult=idealRes=null;save();render();alert(m)}catch(_){alert('このファイルは読み込めませんでした。')}});el.value='';return}
   const ctr=el.closest('tr[data-kind="cm"],tr[data-kind="cs"]');
   if(ctr&&el.dataset.f){const k=ctr.dataset.kind==='cm'?'m':'s',id=ctr.dataset.id,c=(k==='m'?CM:CSN)[id],f=el.dataset.f;
@@ -2401,7 +2442,7 @@ document.addEventListener('change',()=>setTimeout(()=>inTab(paintStale),0));
 
 // 曲一覧の「楽曲の編集」の開閉を覚える（編集のたびに描き直しても閉じない）
 document.addEventListener('toggle',e=>{if(e.target.id==='songEdit'){state.ui.songEdit=e.target.open;save()}},true);
-document.addEventListener('input',e=>{if(e.target.id==='cmpQ'){state.ui.cmpQ=e.target.value;save();paintCmp()}});
+document.addEventListener('input',e=>{if(e.target.id==='cmpQ'){state.ui.cmpQ=e.target.value;save();paintCmpList()}if(e.target.id==='songQ'){state.ui.songQ=e.target.value;save();paintSongList()}});
 // ===== 楽曲のコンボボックス（入力すれば検索、空欄なら全曲の一覧） =====
 const NO_CH='なし（チャレンジライブ無し）';
 function comboHtml(id,val){return`<span class="combo"><input id="${id}" class="songpick" value="${esc(val)}" data-prev="${esc(val)}" autocomplete="off" role="combobox" aria-expanded="false" placeholder="曲名・バンド名を入力（空欄で一覧）"><button type="button" class="combo-btn" data-combo-btn="${id}" tabindex="-1" aria-label="一覧を開く">▾</button><span class="combo-list" role="listbox" hidden></span></span>`}
