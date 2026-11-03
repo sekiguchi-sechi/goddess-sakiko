@@ -211,15 +211,6 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 /* メンバー・スナップ表: 見出しを固定（表の中で縦にスクロール。2026-11-03） */
 .tbl.sticky{max-height:max(300px,calc(100vh - 160px));overflow:auto;scroll-margin-top:110px}
 .tbl.sticky thead th{position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--line)}
-/* 最大まで育てたら: 編成の横並び（2026-11-03） */
-.mx-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:stretch}
-.mx-col{display:flex;flex-direction:column;gap:6px;min-width:0}
-.mx-h{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em}
-.mx-card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--panel-2);font-size:13px;line-height:1.6}
-.mx-card.new{border-color:var(--accent)}
-.mx-card.out{opacity:.6}
-.mx-up{font-size:12px;margin-top:2px}
-@media (max-width:600px){.mx-grid{gap:6px}.mx-card{padding:6px 8px;font-size:12px}}
 </style>
 
 <header class="top">
@@ -1307,7 +1298,7 @@ function renderResult(){
     ${R.tie?`<p class="note">同じ勝ち条件の中では${R.tie==='sec'?'<b>区間スコア</b>が最大（同じ数の相手に区間の順位で勝ちやすい）':'<b>推定スコア</b>が最大'}の編成です（区間スコア ${fmt(e.sec||0)}）。</p>`:''}
     ${R.arena?`<p class="note"><b>アリーナのルール（${esc(song.band||'')}）：タイプ ${R.arena.type==='all'?'ALL':esc(R.arena.type||song.type)}${R.arena.type?'':'（楽曲のまま）'}／撃奏区間 ${R.arena.gk} ×3</b></p>`:isGk(R.obj)?`<p class="note"><b>撃奏区間：${(song.gkTypes||[]).join(' / ')}</b></p>`:''}
     ${slots}
-  </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}${state.ui.tab==='opt'?`<div id="maxCmp">${maxHtml()}</div>`:''}</div>`;
+  </div>${!isGk(R.obj)&&R.obj!=='ptTotal'&&R.obj!=='itemTotal'?retryHtml(e,song)+slotWeightHtml(e,song):''}${chalHtml}${fr}</div>`;
 }
 
 // ===== 追加ツール: 全曲比較タブ（周回効率）。育成の計算は 66-growth.js（ガチャ判断が使う） =====
@@ -1542,48 +1533,6 @@ function idealUps(f){const I=idealRoster(f),R=state.roster;
     if(s&&si){const x=[d('上限解放',s.rk,si.rk),d('Lv',s.lv,si.lv)].filter(Boolean);if(x.length)out.push('<span class="muted">スナップ</span> '+x.join('・'))}
     return out.length?out.join('<br>'):'<span class="muted">育成済み</span>'}}
 
-// ===== 最適化タブ「最大まで育てたら」（2026-11-03）: 今の手持ちを全部最大まで育てたときの最適編成を計算し、今の結果と項目ごとに並べる
-// maxRes.base は計算したときの lastResult（今の結果を計算し直したら古くなるので、ボタンに戻す）
-let maxRes=null;
-const MAX_F={tr:true,lv:true,sl:true,gl:true,rk:true};
-// 結果の要約（R.ctx の状態で呼ぶ）
-function resSummary(R){const P=R.best,e=ev({...P.t,detail:true}),C=R.chal,bp=bestOrderPos(e);
-  return{obj:R.obj,val:P.val,rank:P.rank,score:e.score,max:e.ord?e.ord[e.ord.length-1].s:null,P:e.P,pt:e.pt,it:e.it,sec:e.sec,
-    rows:e.slots.map((x,i)=>({...slotRow(x,i===P.t.L),ord:bp?.[i]})),ch:C?{score:C.score,P:C.P,rank:C.rank,rows:C.slots}:null}}
-function runOptMax(){const song=curSong(),base=lastResult;if(!song||!base?.best)return;maxRes={base,busy:true};paintMax();
-  setTimeout(()=>{if(maxRes?.base!==base)return;
-    try{const r=withIdeal(()=>{seedRnd(12345);const r={...solve(song,base.obj),obj:base.obj};return r.best?{s:resSummary(r)}:{err:'最大まで育てても、どのランクにも届く編成がありません。'}},MAX_F);maxRes={base,...r}}
-    catch(e){maxRes={base,err:'計算できませんでした。'}}
-    if(base.ctx)[M,S,CTX]=base.ctx;paintMax()},30)}
-function paintMax(){const el=document.getElementById('maxCmp');if(el)el.innerHTML=maxHtml()}
-function maxHtml(){const R=lastResult;if(!R?.best||R.obj==null)return'';
-  const X=maxRes&&maxRes.base===R?maxRes:null;
-  const btn=`<button class="btn" data-act="optMax"${X?.busy?' disabled':''}>${X?.busy?'計算中…':'最大まで育てたら？'}</button>`;
-  if(!X||X.busy)return`<div class="panel row" style="align-items:center;gap:12px">${btn}<span class="note">持っているカードをすべて最大（特訓・レベル・覚醒・スキルLv・撃奏Lv・スナップの上限解放）まで育てたときの最適編成と比べます。</span></div>`;
-  if(X.err)return`<div class="panel warn">${esc(X.err)}</div>`;
-  if(R.ctx)[M,S,CTX]=R.ctx;const a=resSummary(R),b=X.s,lab=OBJECTIVES.find(o=>o.id===R.obj)?.label||'';
-  const d=(x,y,p)=>x==null||y==null?'':y===x?'<span class="muted">±0</span>':`${y>x?'+':''}${fmt(Math.round(y-x))}${p&&x?`<span class="muted">（${y>x?'+':''}${((y/x-1)*100).toFixed(1)}%）</span>`:''}`;
-  const row=(k,x,y,f=v=>fmt(Math.round(v)),p=true)=>x==null&&y==null?'':`<tr><td>${k}</td><td class="num">${x==null?'—':f(x)}</td><td class="num"><b>${y==null?'—':f(y)}</b></td><td class="num">${d(x,y,p)}</td></tr>`;
-  const ev=R.obj==='ptTotal'||R.obj==='itemTotal'||R.obj==='chscore',ar=R.obj==='arena';
-  const rows=[row(`目的の値（${esc(lab)}）`,a.val,b.val),ar?'':`<tr><td>推定ランク</td><td class="num">${RANKS[a.rank]}</td><td class="num"><b>${RANKS[b.rank]}</b></td><td></td></tr>`,
-    row('推定スコア（平均）',a.score,b.score),row('最高スコア（発動順が最良）',a.max,b.max),row('推定総合力',a.P,b.P),
-    ar?row('区間スコア',a.sec,b.sec):'',ev?row('ボーナス pt %',a.pt,b.pt,v=>'+'+v+'%',false):'',ev?row('ボーナス バッジ %',a.it,b.it,v=>'+'+v+'%',false):'',
-    a.ch||b.ch?row('チャレンジ 推定スコア',a.ch?.score,b.ch?.score):'',a.ch||b.ch?row('チャレンジ 総合力',a.ch?.P,b.ch?.P):''].join('');
-  const cur=new Set(a.rows.map(r=>r.mcid)),add=b.rows.filter(r=>!cur.has(r.mcid)).map(r=>`${r.chara}「${r.name}」`);
-  return`<div class="panel stack"><div class="row" style="align-items:center;gap:12px"><h2 style="margin:0">最大まで育てたら</h2>${btn}</div>
-    <p class="note">持っているカードをすべて最大まで育てたときの最適編成です。${add.length?`今の編成から入れ替わるカード：<b>${esc(add.join('、'))}</b>`:'メンバーの顔ぶれは今と同じです。'}</p>
-    <div class="tbl"><table><thead><tr><th>項目</th><th class="num">今</th><th class="num">最大まで育てたら</th><th class="num">差</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${maxSide(a.rows,b.rows,R.obj==='ptTotal'||R.obj==='itemTotal'?'フリーの編成':'編成')}${b.ch&&a.ch?maxSide(a.ch.rows,b.ch.rows,'チャレンジの編成'):''}</div>`}
-// 編成を「今」と「最大まで育てたら」の2列で並べる（狭い画面では縦に積む）。最大の側は育成内容、今と違うカードには印
-function maxSide(A,B,title){const up=idealUps(MAX_F),inA=new Set(A.map(r=>r.mcid)),inB=new Set(B.map(r=>r.mcid));
-  const card=(r,max)=>`<div class="mx-card${max?(inA.has(r.mcid)?'':' new'):(inB.has(r.mcid)?'':' out')}">
-    <div>${r.lead?'<span class="lead">★</span> ':''}<b>${esc(r.chara)}</b> <span class="muted">${esc(r.rarity)}</span> ${chip(r.type)}${r.ord?` <span class="muted">${r.ord}番目</span>`:''}${max&&!inA.has(r.mcid)?' <span class="pill">入れ替え</span>':''}</div>
-    <div>${esc(r.name)}</div><div class="muted">${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'スナップなし'}</div>
-    ${max?`<div class="mx-up">${up(r)}</div>`:''}</div>`;
-  // 同じカードは同じ行に。入れ替わるカードは、抜けるカードの行に入れる
-  const Bm=new Map(B.map(r=>[r.mcid,r])),rest=B.filter(r=>!inA.has(r.mcid)),pair=A.map(r=>Bm.get(r.mcid)||rest.shift());
-  return`<h3 style="margin:6px 0 0">${title}</h3><div class="mx-grid"><div class="mx-h">今</div><div class="mx-h">最大まで育てたら</div>
-    ${A.map((r,i)=>card(r,false)+(pair[i]?card(pair[i],true):'<div></div>')).join('')}</div>`}
 // ===== 並列計算（Web Worker、2026-10-30） =====
 // 同じスクリプト（APP_SRC。データ込み）を Worker で動かし、最適化の繰り返しをCPUのコアごとに分ける:
 //   全曲比較（曲ごと）・育成タブ（目的ごと・候補ごと）・理想編成（今の手持ちと理想を同時に）
@@ -2365,7 +2314,6 @@ document.addEventListener('click',e=>{
       (window.claude?.use?window.claude.use('downloads'):Promise.resolve(null)).then(dl=>{if(!dl){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);msg('書き出しました（ダウンロードフォルダを確認してください）。');return}
         dl.save({filename:name,data}).then(()=>msg('書き出しました。'),e=>msg(e&&e.code==='declined'?'保存を取りやめました。':'書き出せませんでした。下の「JSONを表示」から控えを取ってください。'))});return}
     case'importFile':document.getElementById('importFile')?.click();return;
-    case'optMax':runOptMax();return;
     case'cmpSongs':startCompare();return;
     case'grow':startGrow();return;
     case'gacha':startGrow('gacha');return;
