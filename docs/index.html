@@ -211,13 +211,9 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 /* メンバー・スナップ表: 見出しを固定（表の中で縦にスクロール。2026-11-03） */
 .tbl.sticky{max-height:max(300px,calc(100vh - 160px));overflow:auto;scroll-margin-top:110px}
 .tbl.sticky thead th{position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--line)}
-/* JSON の読み込み・書き出し: 広い画面はタブバーの右端、狭い画面は各タブ内のボタン（2026-11-03） */
-nav.tabs .tab-io{position:absolute;top:6px;right:max(16px,env(safe-area-inset-right,0px));height:39px;display:flex;align-items:center;gap:6px}
-nav.tabs .tab-io button.btn{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);padding:3px 10px;margin:0;font-size:12px;font-weight:700}
-nav.tabs .tab-io button.btn:hover{border-color:var(--accent)}
-.io-inline{display:inline-flex;flex-wrap:wrap;gap:8px}
-@media (min-width:860px){.io-inline{display:none}}
-@media (max-width:859px){nav.tabs .tab-io{display:none}}
+/* JSON の読み込み・書き出し: ヘッダーの右上。狭い画面はサブタイトルの下（2026-11-03） */
+.hero-io{position:absolute;top:18px;right:20px;display:flex;gap:6px;z-index:1}
+@media (max-width:600px){.hero-io{position:static;margin-top:12px}}
 </style>
 
 <header class="top">
@@ -225,6 +221,7 @@ nav.tabs .tab-io button.btn:hover{border-color:var(--accent)}
     <p class="eyebrow">BanG Dream! Our Notes</p>
     <h1>Goddess Sakiko</h1>
     <p class="sub">手持ちのメンバーとスナップから、イベントpt・バッジ・スコアごとに最適な編成を計算します</p>
+    <div class="hero-io"><button class="btn small" data-act="importFile" title="手持ちなどをJSONファイルから読み込む">JSONを読み込む</button><button class="btn small" data-act="exportFile" title="手持ちなどをJSONファイルに書き出す">書き出す</button></div>
   </div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -268,8 +265,6 @@ const isGk=o=>o==='gkscore'||o==='arena';
 const uid=()=>Math.random().toString(36).slice(2,9);
 const fmt=n=>Math.round(n).toLocaleString('ja-JP');
 // 手持ちの読み込み・書き出しボタン（メンバー・スナップ・データの各タブで共通）
-// タブバー右端用（幅が狭い画面では隠し、各タブ内の IO_BTNS を使う）
-const IO_TAB='<div class="tab-io"><button class="btn small" data-act="importFile" title="手持ちなどをJSONファイルから読み込む">JSONを読み込む</button><button class="btn small" data-act="exportFile" title="手持ちなどをJSONファイルに書き出す">書き出す</button></div>';
 const IO_BTNS='<button class="btn small" data-act="importFile">JSONを読み込む</button><button class="btn small" data-act="exportFile">ファイルに書き出す</button>';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -1080,7 +1075,7 @@ const tabGroup=id=>TAB_GROUPS.find(g=>g[2].some(x=>x[0]===id))||TAB_GROUPS[0];
 let lastResult=null,shownIdx=null;
 function renderTabs(){const cur=tabGroup(state.ui.tab);
   document.getElementById('tabs').innerHTML=TAB_GROUPS.map(([g,l])=>`<button role="tab" aria-selected="${cur[0]===g}" data-grp="${g}">${l}</button>`).join('')+
-    (cur[2].length>1?`<div class="subtabs" role="tablist">${cur[2].map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('')}</div>`:'')+IO_TAB;
+    (cur[2].length>1?`<div class="subtabs" role="tablist">${cur[2].map(([id,l])=>`<button role="tab" aria-selected="${state.ui.tab===id}" data-tab="${id}">${l}</button>`).join('')}</div>`:'');
 }
 // 編成表（レア・キャラ・バンド・カード名・タイプ・スナップ）
 function teamTable(rows,ideal){const ord=rows.some(r=>r.ord),gu=ideal?idealUps(ideal):null;return`<div class="tbl"><table class="team"><thead><tr><th></th><th>レア</th><th>キャラ</th><th>バンド</th><th>カード名</th><th>タイプ</th><th>スナップ</th>${gu?'<th>育成（手持ち→最大）</th>':''}${ord?'<th class="num" title="最高スコアになるスキルの発動順">最高の発動順</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr${r.lead?' class="best"':''}><td class="c-lead">${r.lead?'<b style="color:var(--accent)" title="リーダー">★</b>':''}</td><td class="c-rar">${esc(r.rarity)}</td><td class="c-chara"><b>${esc(r.chara)}</b></td><td class="c-band">${esc(r.band)}</td><td class="c-name">${esc(r.name)}</td><td class="c-type">${chip(r.type)}</td><td class="c-snap">${r.snap?`${chip(r.snapType)} ${esc(r.snap)}`:'<span class="muted">なし</span>'}</td>${gu?`<td class="grow-up c-grow">${gu(r)}</td>`:''}${ord?`<td class="num c-ord">${r.ord?`${r.ord}番目`:''}</td>`:''}</tr>`).join('')}</tbody></table></div>${ord?'<p class="note">発動順はライブごとにランダムで、表の順になると最高スコアです</p>':''}`}
@@ -1744,7 +1739,7 @@ function filterBar(kind){const f=cardFilter();const own=Object.values(state.rost
   return`<div class="row"><label class="f">表示<select data-cf="own">${opts([['own','所持のみ'],['all','全カード'],['not','未所持のみ']],f.own)}</select></label>
     <label class="f">並べ替え<select data-cf="sort">${opts([['band','バンド順'],['rarity','レア度順'],['type','タイプ順']],f.sort)}</select></label>
     <span class="muted">所持 ${own}枚 / 全 ${kind==='m'?CAT.members.length:CAT.snaps.length}枚</span>
-    <span style="flex:1"></span><span class="io-inline">${IO_BTNS}</span></div>
+    </div>
     <div class="fchips">${fGroup('band','バンド',BAND_NAMES.map(b=>[b,b]))}${fGroup('rarity','レア度',RARITY_ORDER.filter(r=>(kind==='m'?CAT.members:CAT.snaps).some(c=>c.rarity===r)).map(r=>[r,r]))}${fGroup('type','タイプ',TYPES.map(t=>[t,t]),true)}</div>
     <p id="jsonMsg" class="note" style="margin:0"></p>${jsonHelp(false)}`}
 // 絞り込みボタン（押すたびに選択・解除。何も選ばないと「すべて」）
