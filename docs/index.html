@@ -214,6 +214,13 @@ label.f>span:first-child:has(.songband){white-space:nowrap;overflow:hidden;text-
 /* JSON の読み込み・書き出し: ヘッダーの右上。狭い画面はサブタイトルの下（2026-11-03） */
 .hero-io{position:absolute;top:18px;right:20px;display:flex;gap:6px;z-index:1}
 @media (max-width:600px){.hero-io{position:static;margin-top:12px}}
+/* JUST の判定幅スナップ × JUSTスキル人数の比較表（2026-11-08） */
+table.grid td.gc{text-align:center;vertical-align:top;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1.5;border-left:1px solid var(--line)}
+table.grid td.gc.none{color:var(--muted);vertical-align:middle}
+table.grid td.gc.best{background:var(--soft);box-shadow:inset 0 0 0 2px var(--accent)}
+table.grid td.gc.shown:not(.best){box-shadow:inset 0 0 0 2px var(--line)}
+table.grid th{white-space:nowrap}
+table.grid thead th{text-align:center}table.grid tbody th{text-align:center;padding:0 10px}
 </style>
 
 <header class="top">
@@ -973,6 +980,7 @@ function solve(song,obj,opt={}){
     // 撃奏アリーナ: 同じ勝ち条件の中では「区間スコア」が大きいほど区間の順位で勝ちやすい（公式ヘルプ: 基準2＝区間の獲得スコア）。
     // 初期値は区間スコアで選ぶ（arenaTie='score' で推定スコア）。アリーナ育成と同じ選び方（2026-11-02）
     if(arena&&st.arenaTie!=='score'){CTX.needSec=true;f=e=>e.sec+e.score*1e-7}
+    const f0=f;// 撃奏の条件を付ける前の評価（JUST の比較表で使う）
     const comboMax=()=>comboMaxOf();
     // 区間の種類が混ざった曲（全部入り）でも、JUST区間があれば判定幅スナップを最低1枚入れる（無いと実戦でJUSTが取りにくい）
     // 判定幅スナップの枚数を指定したとき（撃奏ライブ gkJudgeN・アリーナ arenaJudgeN）は、JUST区間のある曲でその枚数ちょうどの編成を探す（手持ちの判定幅スナップ（撃奏サポートLv5）が足りなければ持っている枚数）
@@ -1015,6 +1023,22 @@ function solve(song,obj,opt={}){
     if(opt.gkCmp&&isGk(obj)&&fCmp){cmp=[];const st=state.settings,best0=best;
       const jr=e=>gkJustRate(e.nj);
       for(const kind of [...new Set(song.gkTypes||[])]){
+        // JUST: 判定幅スナップの枚数 × JUSTスキル持ちの人数 の組み合わせごとに、ちょうどその構成でスコア最大の編成を探す（2026-11-08）
+        //   区間の順位の取りやすさは区間の強さ（js）で比べる。その構成が作れない組み合わせは空欄
+        if(kind==='JUST'){const nMax=Math.min(5,S.filter(s=>s.gkJudgeAll).length),kMax=Math.min(5,M.filter(m=>m.gekiKind==='JUST').length),cells={};
+          const key=t0=>JSON.stringify(t0),seen=new Map([[key(t),best0]]);CTX.needJs=true;
+          for(let n=0;n<=nMax;n++)for(let k=0;k<=kMax;k++){
+            const dev=e=>Math.abs((e.njc||0)-n)+Math.abs(((e.mk||{}).JUST||0)-k),g=e=>f0(e)-1e15*dev(e);let u=withFast(()=>optimizeF(g));if(!u)continue;
+            // 探索は軽い設定にして（36通りあるため）、隣のマスで見つけた編成からも探し直す
+            let uv=g(evq(u));for(const x of [(n-1)+'|'+k,n+'|'+(k-1)])if(cells[x]!=null){const r=localSearch(JSON.parse(JSON.stringify(front[cells[x]].t)),g);if(r.val>uv+1e-9){u=canon(r.t);uv=g(evq(u))}}
+            let p=seen.get(key(u));if(!p){p=pack(u);seen.set(key(u),p)}
+            if(dev(p.e))continue;
+            // 最適の編成と同じ構成なら最適の編成を出す（同じ構成の中では最適の編成のほうがスコアが高いはず）
+            if(!dev(best0.e)&&f0(best0.e)>=f0(p.e)-1e-6)p=best0;
+            let i=front.indexOf(p);if(i<0){front.push(p);i=front.length-1}cells[n+'|'+k]=i}
+          CTX.needJs=false;
+          const ns=[...Array(nMax+1).keys()].filter(n=>Object.keys(cells).some(x=>x.startsWith(n+'|'))),ks=[...Array(kMax+1).keys()].filter(k=>Object.keys(cells).some(x=>x.endsWith('|'+k)));
+          if(Object.keys(cells).length)cmp.push({kind,grid:true,ns,ks,cells});continue}
         const met=kind==='LUCK'?e=>e.lk||0:kind==='COMBO'?e=>e.cb||0:jr;CTX.needLk=kind==='LUCK';
         const mx=kind==='COMBO'?comboMax():met(evq(optimizeF(met))),bv=met(evq(t));if(!(mx>0))continue;
         let lv=[];if(kind==='LUCK')lv=[1,.95,.9,.85,.8,.7,.6,.5].map(r=>mx*r);
@@ -1270,12 +1294,22 @@ function gkCmpHtml(R,P){const b=R.best.e;
   const LBL={LUCK:['LUCK pt','LUCK pt（1区間の期待値）の下限を手持ちの最高の100%〜50%で変えて','LUCK pt は区間の順位を決める値（抽選でぶれます）'],
     COMBO:['COMBO数','COMBO数（1ノーツあたりの上乗せ）の下限を最高から1ずつ下げて','上乗せが1多いと1ノーツごとのCOMBOが1多い'],
     JUST:['推定JUST率','判定幅スナップの枚数で決まる推定JUST率の下限を変えて','JUST率が高いほど区間のJUST数を稼ぎやすい']};
-  return R.cmp.filter(c=>c.rows.length).map(c=>{const L=LBL[c.kind],show=v=>c.kind==='COMBO'?'+'+cbf(v):c.kind==='JUST'?Math.round(v)+'%':(+v).toFixed(1);
+  return R.cmp.filter(c=>c.grid||c.rows.length).map(c=>{if(c.grid)return gkJustGrid(R,P,c);const L=LBL[c.kind],show=v=>c.kind==='COMBO'?'+'+cbf(v):c.kind==='JUST'?Math.round(v)+'%':(+v).toFixed(1);
     return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>${L[0]}と推定スコアの比較（${c.kind}）</b> <span class="muted">（${c.rows.length}件）</span></summary>
   <p class="note">${L[1]}、それぞれ${R.obj==='arena'&&R.tie==='sec'?'区間スコア':'スコア'}が最大の編成を探しました${R.obj==='arena'?'':'（撃奏スキル持ちの人数の条件は残しています）'}。${L[2]}。推定スコアは区間1位をとれたときの値です。${c.rows.length===1?`<b>最適な編成が${L[0]}も手持ちの最高なので、比べる候補はありません。</b>`:''}</p>
   <div class="tbl"><table><thead><tr><th class="num">${L[0]}</th><th class="num">${c.kind==='JUST'?'判定幅スナップ':'最高比'}</th>${c.kind==='JUST'?'<th class="num">JUSTスキル</th>':''}<th class="num">推定スコア</th><th class="num">スコア差</th><th></th></tr></thead><tbody>
   ${c.rows.map(({i,v})=>{const p=R.frontier[i];return`<tr class="${p===R.best?'best':''}"><td class="num"><b>${show(v)}</b></td><td class="num">${c.kind==='JUST'?(p.e.njc||0)+'枚':Math.round(v/c.max*100)+'%'}</td>${c.kind==='JUST'?`<td class="num">${(p.e.mk||{}).JUST||0}人</td>`:''}<td class="num"><b>${fmt(p.e.score)}</b></td><td class="num">${p===R.best?'—':(p.e.score>=b.score?'+':'')+fmt(p.e.score-b.score)}</td><td><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button>${p===R.best?' <span class="pill">最適</span>':''}</td></tr>`}).join('')}
   </tbody></table></div></details>`}).join('')}
+// JUST: 判定幅スナップの枚数 × JUSTスキルの人数 の表。各マスはその構成でスコアが最大の編成（2026-11-08）
+function gkJustGrid(R,P,c){const b=R.best.e,ps=Object.values(c.cells).map(i=>R.frontier[i].e),sec=R.obj==='arena'&&R.tie==='sec';
+  const jsTop=Math.max(...ps.map(e=>e.js||0));
+  const cell=(n,k)=>{const i=c.cells[n+'|'+k];if(i==null)return'<td class="gc none">—</td>';const p=R.frontier[i],e=p.e,d=e.score-b.score;
+    return`<td class="gc${p===R.best?' best':''}${p===P?' shown':''}"><b>${fmt(e.score)}</b><div class="muted">${p===R.best?'最適':(d>=0?'+':'')+fmt(d)}</div><div>強さ <b>${(e.js||0).toFixed(2)}</b>${(e.js||0)>=jsTop-1e-9?' <span class="pill">最高</span>':''}</div>${sec?`<div class="muted">区間 ${fmt(e.sec)}</div>`:''}<div class="muted">JUST率 ${Math.round(gkJustRate(e.nj))}%</div><button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button></td>`};
+  return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>判定幅スナップ × JUSTスキルの人数の比較（JUST）</b> <span class="muted">（${Object.keys(c.cells).length}通り）</span></summary>
+  <p class="note">判定幅スナップの枚数とJUSTスキル持ちの人数をちょうどその数にして、${sec?'区間スコア':'推定スコア'}が最大の編成を探しました。上の段は推定スコア（区間1位をとれたときの値）と最適の編成との差。「強さ」は区間の強さ（(推定JUST率＋変換)×(1＋JUST数獲得量の上乗せ)）で、大きいほど区間のJUST数を稼げて区間の順位をとりやすくなります。—はその構成が作れない組み合わせです。</p>
+  <div class="tbl"><table class="grid"><thead><tr><th>判定幅＼JUSTスキル</th>${c.ks.map(k=>`<th class="num">${k}人</th>`).join('')}</tr></thead><tbody>
+  ${c.ns.map(n=>`<tr><th>${n}枚</th>${c.ks.map(k=>cell(n,k)).join('')}</tr>`).join('')}
+  </tbody></table></div></details>`}
 function renderResult(){
   const R=lastResult,song=state.songs.find(x=>x.id===R.songId)||curSong();
   // 計算したときのカード一覧に戻す（他のタブの計算で入れ替わっていても正しく出す）
