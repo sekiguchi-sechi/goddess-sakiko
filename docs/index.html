@@ -118,6 +118,8 @@ button.fclear{font:inherit;font-size:11px;border:0;background:none;color:var(--m
 .guide>summary{cursor:pointer}.guide .steps{margin:8px 0;padding-left:20px;line-height:1.75}.guide .steps li.done{color:var(--muted)}
 .combo-opt em{font-style:normal;font-size:11px;color:var(--accent);margin-left:4px}
 .combo-opt:hover,.combo-opt.on{background:var(--soft)}
+.combo-grp{flex-shrink:0;position:sticky;top:0;z-index:1;padding:5px 12px 3px;font-size:11px;font-weight:700;color:var(--muted);background:var(--panel-2);border-top:1px solid var(--line)}
+.combo-grp.b-0{color:#4f8fd6}.combo-grp.b-1{color:#b06ad0}.combo-grp.b-2{color:#e0789a}.combo-grp.b-3{color:#3fa98a}.combo-grp.b-4{color:#d99a3a}
 .combo-empty{flex-shrink:0;padding:6px 12px;font-size:12px;color:var(--muted)}
 label.f.dim{opacity:.4}
 label.f.dim:hover,label.f.dim:focus-within{opacity:.75}
@@ -2485,7 +2487,13 @@ function comboOpen(inp,q){
   const list=inp.parentNode.querySelector('.combo-list');const nz=x=>x.normalize('NFKC').toLowerCase();const qq=nz(q||'');
   // 曲名のほか、バンド名でも絞り込める（2026-11-01）
   const items=comboItems(inp.id).filter(x=>!qq||nz(x.l).includes(qq)||(x.b&&nz(x.b).includes(qq)));
-  list.innerHTML=items.length?items.map((x,k)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${x.b?`<i class="cb b-${BAND_NAMES.indexOf(x.b)}">${esc(x.b)}</i>`:''}${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}${gkLabel(x.v)}</span>`).join(''):'<span class="combo-empty">一致する曲がありません</span>';
+  // バンドごとにまとめて見出しを付ける（2026-11-16）。「なし」・課題楽曲は先頭のまま、バンドの順は BANDS、バンドの無い曲は最後
+  const top=items.filter(x=>x.v==='none'||x.tag),rest=items.filter(x=>!(x.v==='none'||x.tag)),bi=b=>{const i=BAND_NAMES.indexOf(b);return i<0?99:i};
+  const grp=[...new Set(rest.map(x=>x.b))].sort((p,q)=>bi(p)-bi(q));
+  const opt=(x,k,chip)=>`<span class="combo-opt${k===0&&qq?' on':''}" role="option" data-v="${esc(x.v)}">${chip&&x.b?`<i class="cb b-${BAND_NAMES.indexOf(x.b)}">${esc(x.b)}</i>`:''}${esc(x.l)}${x.tag?` <em>${x.tag}</em>`:''}${gkLabel(x.v)}</span>`;
+  let k=0,html=top.map(x=>opt(x,k++,true)).join('');
+  for(const g of grp){html+=`<span class="combo-grp b-${bi(g)}" role="presentation">${esc(g||'その他')}</span>`+rest.filter(x=>x.b===g).map(x=>opt(x,k++,false)).join('')}
+  list.innerHTML=items.length?html:'<span class="combo-empty">一致する曲がありません</span>';
   list.hidden=false;inp.setAttribute('aria-expanded','true');
 }
 function comboClose(inp,restore){const list=inp.parentNode.querySelector('.combo-list');list.hidden=true;inp.setAttribute('aria-expanded','false');if(restore)inp.value=inp.dataset.prev}
