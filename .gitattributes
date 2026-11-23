@@ -1,0 +1,2 @@
+# 生成物の改行をリポジトリ内では LF に統一する（Windows の PC と GitHub Actions のどちらで作っても同じ内容になるように。2026-11-24）
+docs/index.html text
