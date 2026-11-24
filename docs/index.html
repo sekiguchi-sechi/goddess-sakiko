@@ -1307,7 +1307,7 @@ const kpiBox=inner=>`<details class="kpibox" data-kpi${state.ui.kpiOpen===false?
 //   JUST（2026-11-08）: 判定幅スナップ × JUSTスキルの人数／LUCK（2026-11-15）: 抽選系スナップ × LUCKスキルの人数／COMBO（2026-11-15）: COMBOスキルの人数
 function gkCmpHtml(R,P){return R.cmp.filter(c=>c.grid).map(c=>gkGrid(R,P,c)).join('')}
 const GK_GRID={
-  JUST:{row:'判定幅スナップ',col:'JUSTスキル',lose:true,m:e=>e.js||0,show:e=>`強さ <b>${(e.js||0).toFixed(2)}</b>`,sub:e=>`JUST率 ${Math.round(gkJustRate(e.nj))}%`,
+  JUST:{row:'判定幅スナップ',col:'JUSTスキル',m:e=>e.js||0,show:e=>`強さ <b>${(e.js||0).toFixed(2)}</b>`,sub:e=>`JUST率 ${Math.round(gkJustRate(e.nj))}%`,
     note:'「強さ」は区間の強さ（(推定JUST率＋変換)×(1＋JUST数獲得量の上乗せ)）で、大きいほど区間のJUST数を稼げて区間の順位をとりやすくなります。判定幅スナップは JUST区間のあいだずっと判定幅を広げるものです。'},
   LUCK:{row:'抽選系スナップ',col:'LUCKスキル',m:e=>e.lk||0,show:e=>`LUCK pt <b>${(e.lk||0).toFixed(1)}</b>`,sub:null,
     note:'「LUCK pt」は1区間の LUCK pt の期待値（抽選でぶれます）で、大きいほど区間の順位をとりやすくなります。抽選系スナップは「抽選結果を LUCKY 以上に」などの抽選サポートと「NO LUCK のとき抽選ゲージ獲得」を持つスナップで、LUCKY RUSH 中のスコアUPのスナップは数えません。'},
@@ -1316,10 +1316,10 @@ const GK_GRID={
 function gkGrid(R,P,c){const D=GK_GRID[c.kind],b=R.best.e,ps=Object.values(c.cells).map(i=>R.frontier[i].e),sec=R.obj==='arena'&&R.tie==='sec';
   const top=Math.max(...ps.map(D.m));
   const cell=(n,k)=>{const i=c.cells[n+'|'+k];if(i==null)return'<td class="gc none">—</td>';const p=R.frontier[i],e=p.e,d=e.score-b.score;
-    return`<td class="gc${p===R.best?' best':''}${p===P?' shown':''}"><b>${fmt(e.score)}</b><div class="muted">${p===R.best?'最適':(d>=0?'+':'')+fmt(d)}</div><div>${D.show(e)}${D.m(e)>=top-1e-9?' <span class="pill">最高</span>':''}</div>${sec?`<div class="muted">区間 ${fmt(e.sec)}</div>`:''}${D.lose&&e.gkLose!=null?`<div class="muted">全区間2位 ${fmt(e.gkLose)}</div>`:''}${D.sub?`<div class="muted">${D.sub(e)}</div>`:''}<button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button></td>`};
+    return`<td class="gc${p===R.best?' best':''}${p===P?' shown':''}"><b>${fmt(e.score)}</b><div class="muted">${p===R.best?'最適':(d>=0?'+':'')+fmt(d)}</div><div>${D.show(e)}${D.m(e)>=top-1e-9?' <span class="pill">最高</span>':''}</div>${sec?`<div class="muted">区間 ${fmt(e.sec)}</div>`:''}${e.gkLose!=null?`<div class="muted">全区間2位 ${fmt(e.gkLose)}</div>`:''}${D.sub?`<div class="muted">${D.sub(e)}</div>`:''}<button class="btn small" data-show="${i}">${p===P?'表示中':'表示'}</button></td>`};
   const title=D.row?`${D.row} × ${D.col}の人数`:`${D.col}の人数`;
   return`<details class="panel frbox" data-fr${state.ui.frOpen===false?'':' open'}><summary><b>${title}の比較（${c.kind}）</b> <span class="muted">（${Object.keys(c.cells).length}通り）</span></summary>
-  <p class="note">${D.row?D.row+'の枚数と':''}${D.col}持ちの人数をちょうどその数にして、${sec?'区間スコア':'推定スコア'}が最大の編成を探しました。上の段は推定スコア（区間1位をとれたときの値）と最適の編成との差。${D.lose?'「全区間2位」は3区間とも2位だったときの推定スコアです。':''}${D.note}—はその構成が作れない組み合わせです。</p>
+  <p class="note">${D.row?D.row+'の枚数と':''}${D.col}持ちの人数をちょうどその数にして、${sec?'区間スコア':'推定スコア'}が最大の編成を探しました。上の段は推定スコア（区間1位をとれたときの値）と最適の編成との差。「全区間2位」は3区間とも2位だったときの推定スコアです。${D.note}—はその構成が作れない組み合わせです。</p>
   <div class="tbl"><table class="grid"><thead><tr><th>${D.row?D.row+'＼'+D.col:D.col}</th>${c.ks.map(k=>`<th class="num">${k}人</th>`).join('')}</tr></thead><tbody>
   ${c.ns.map(n=>`<tr><th>${D.row?n+'枚':''}</th>${c.ks.map(k=>cell(n,k)).join('')}</tr>`).join('')}
   </tbody></table></div></details>`}
